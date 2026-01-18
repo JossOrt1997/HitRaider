@@ -47,7 +47,14 @@ public class CombatSystem {
         return hitThisFrame;
     }
 
-    /** Llamar antes de destruir un Body (enemy/player) para evitar el crash de fixtures */
+    /** Para debug: fixtures de hitbox actualmente activas (solo lectura) */
+    public List<Fixture> getActiveHitboxFixtures() {
+        List<Fixture> out = new ArrayList<>(active.size());
+        for (ActiveHitbox ah : active) out.add(ah.fixture);
+        return out;
+    }
+
+    /** Llamar antes de destruir un Body para evitar crashes por fixtures activas */
     public void purgeForBody(Body body) {
         if (body == null) return;
 
@@ -68,7 +75,6 @@ public class CombatSystem {
                                  int aimY,
                                  int damage) {
 
-        // 1 hitbox activa por body
         for (ActiveHitbox ah : active) {
             if (ah.ownerBody == ownerBody) return;
         }
@@ -111,7 +117,6 @@ public class CombatSystem {
             ah.hitbox.timeLeft -= delta;
 
             if (ah.hitbox.timeLeft <= 0f) {
-                // Puede que el body ya haya sido destruido: destrucción segura
                 safeDestroyFixture(ah.ownerBody, ah.fixture);
                 it.remove();
             }
@@ -120,14 +125,9 @@ public class CombatSystem {
 
     private void safeDestroyFixture(Body body, Fixture fixture) {
         if (body == null || fixture == null) return;
-        // Si el body ya no está en un World (fue destruido), no tocamos nada.
         if (body.getWorld() == null) return;
 
-        // Si el fixture ya no pertenece al body, no hacemos nada.
-        // (getFixtureList() es una Array<Fixture> en libGDX)
         if (!body.getFixtureList().contains(fixture, true)) return;
-
-        // Evita el assert: solo destruir si aún hay fixtures
         if (body.getFixtureList().size == 0) return;
 
         body.destroyFixture(fixture);
@@ -143,10 +143,7 @@ public class CombatSystem {
         if (!(otherUD instanceof Damageable target)) return;
         if (!target.isAlive()) return;
 
-        // No friendly fire
         if (target.getFaction() == hb.ownerFaction) return;
-
-        // No doble-hit
         if (!hb.canHit(target)) return;
 
         float hx = hitboxFix.getBody().getPosition().x;
@@ -157,7 +154,6 @@ public class CombatSystem {
         target.applyDamage(hb.damage, knock);
         hb.markHit(target);
 
-        // Recoil al atacante
         if (hb.owner != null && hb.owner.isAlive()) {
             Body ownerBody = hitboxFix.getBody();
             Vector2 ov = ownerBody.getLinearVelocity();

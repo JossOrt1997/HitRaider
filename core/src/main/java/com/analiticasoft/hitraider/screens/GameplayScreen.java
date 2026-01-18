@@ -1,19 +1,21 @@
 package com.analiticasoft.hitraider.screens;
 
 import com.analiticasoft.hitraider.combat.CombatSystem;
+import com.analiticasoft.hitraider.combat.Projectile;
+import com.analiticasoft.hitraider.combat.ProjectileSystem;
 import com.analiticasoft.hitraider.entities.MeleeEnemy;
 import com.analiticasoft.hitraider.entities.Player;
+import com.analiticasoft.hitraider.entities.RangedEnemy;
+import com.analiticasoft.hitraider.input.Action;
 import com.analiticasoft.hitraider.input.DesktopInputProvider;
 import com.analiticasoft.hitraider.input.InputState;
 import com.analiticasoft.hitraider.physics.GameContactListener;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.analiticasoft.hitraider.physics.PhysicsWorld;
+import com.analiticasoft.hitraider.render.*;
+import com.analiticasoft.hitraider.relics.*;
 import com.analiticasoft.hitraider.world.EncounterManager;
 import com.analiticasoft.hitraider.world.LevelFactory;
-import com.analiticasoft.hitraider.render.AnimKey;
-import com.analiticasoft.hitraider.render.CharacterAnimator;
-import com.analiticasoft.hitraider.render.DebugAnimLibrary;
-import com.analiticasoft.hitraider.render.DebugCharacterRenderer;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
@@ -24,10 +26,13 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.*;
+import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
+import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+
+import java.util.Random;
 
 public class GameplayScreen implements Screen {
 
@@ -36,7 +41,6 @@ public class GameplayScreen implements Screen {
 
     private OrthographicCamera worldCamera;
     private Viewport worldViewport;
-
     private OrthographicCamera uiCamera;
 
     private ShapeRenderer shapes;
@@ -46,39 +50,41 @@ public class GameplayScreen implements Screen {
     private boolean debugOverlay = true;
     private boolean debugWorld = true;
     private boolean box2dDebugOn = false;
+    private boolean debugHitboxes = true;
+    private boolean debugHurtboxes = true;
 
     private final InputState input = new InputState();
     private final DesktopInputProvider inputProvider = new DesktopInputProvider();
 
     private PhysicsWorld physics;
     private CombatSystem combat;
+    private ProjectileSystem projectiles;
     private GameContactListener contactListener;
 
     private Box2DDebugRenderer box2dDebug;
     private final Matrix4 box2dMatrix = new Matrix4();
 
-    private Player player;
-
     private Array<LevelFactory.PlatformRect> platformRects;
 
-    private final Array<MeleeEnemy> enemies = new Array<>();
-    private final Array<CharacterAnimator> enemyAnims = new Array<>();
+    private Player player;
+
+    private final Array<MeleeEnemy> meleeEnemies = new Array<>();
+    private final Array<CharacterAnimator> meleeAnims = new Array<>();
+
+    private final Array<RangedEnemy> rangedEnemies = new Array<>();
+    private final Array<CharacterAnimator> rangedAnims = new Array<>();
+
+    private final Array<RelicPickup> pickups = new Array<>();
+    private final RelicManager relics = new RelicManager();
 
     private float hitstopTimer = 0f;
     private final EncounterManager encounter = new EncounterManager();
 
-    // Door / barrier
-    private Body doorBody;
-    private boolean doorClosed = false;
-
-    private static final float DOOR_X = 1180f;
-    private static final float DOOR_Y = 120f;
-    private static final float DOOR_W = 28f;
-    private static final float DOOR_H = 220f;
-
-    // Debug “animation frames”
-    private final DebugCharacterRenderer debugCharRenderer = new DebugCharacterRenderer();
+    private final CharacterRenderer charRenderer = new DebugCharacterRenderer();
+    private final DebugPhysicsRenderer debugPhysics = new DebugPhysicsRenderer();
     private CharacterAnimator playerAnim;
+
+    private final Random rng = new Random();
 
     @Override
     public void show() {
@@ -91,14 +97,12 @@ public class GameplayScreen implements Screen {
         uiCamera.update();
 
         shapes = new ShapeRenderer();
-
         batch = new SpriteBatch();
         font = new BitmapFont();
         font.setColor(0.05f, 0.05f, 0.06f, 1f);
 
         box2dDebug = new Box2DDebugRenderer();
 
-        // Define debug animations
         playerAnim = new CharacterAnimator();
         DebugAnimLibrary.definePlayer(playerAnim);
 
@@ -111,80 +115,43 @@ public class GameplayScreen implements Screen {
     private void initWorld() {
         if (physics != null) physics.dispose();
 
-        enemies.clear();
-        enemyAnims.clear();
-
-        doorBody = null;
-        doorClosed = false;
-
         physics = new PhysicsWorld(new Vector2(0f, -25f));
-
         combat = new CombatSystem(physics.world);
+        projectiles = new ProjectileSystem(physics.world);
+
         contactListener = new GameContactListener(combat);
         physics.world.setContactListener(contactListener);
 
         platformRects = LevelFactory.createTestLevel(physics.world);
 
+        meleeEnemies.clear();
+        meleeAnims.clear();
+        rangedEnemies.clear();
+        rangedAnims.clear();
+        pickups.clear();
+
         player = new Player(physics.world, 120f, 140f);
 
-        // Spawn melee enemies + animator per enemy
-        spawnMeleeEnemy(520f, 220f);
-        spawnMeleeEnemy(820f, 220f);
-        spawnMeleeEnemy(650f, 220f);
+        spawnMelee(520f, 220f);
+        spawnMelee(650f, 220f);
+        spawnRanged(820f, 220f);
 
         encounter.reset();
         hitstopTimer = 0f;
-
-        closeDoor();
     }
 
-    private void spawnMeleeEnemy(float xPx, float yPx) {
-        enemies.add(new MeleeEnemy(physics.world, xPx, yPx));
-        CharacterAnimator ea = new CharacterAnimator();
-        DebugAnimLibrary.defineMeleeEnemy(ea);
-        enemyAnims.add(ea);
+    private void spawnMelee(float x, float y) {
+        meleeEnemies.add(new MeleeEnemy(physics.world, x, y, true));
+        CharacterAnimator a = new CharacterAnimator();
+        DebugAnimLibrary.defineMeleeEnemy(a);
+        meleeAnims.add(a);
     }
 
-    private void closeDoor() {
-        if (doorBody != null) return;
-
-        BodyDef bd = new BodyDef();
-        bd.type = BodyDef.BodyType.StaticBody;
-        bd.position.set(
-            PhysicsConstants.toMeters(DOOR_X),
-            PhysicsConstants.toMeters(DOOR_Y)
-        );
-
-        doorBody = physics.world.createBody(bd);
-
-        PolygonShape shape = new PolygonShape();
-        shape.setAsBox(
-            PhysicsConstants.toMeters(DOOR_W / 2f),
-            PhysicsConstants.toMeters(DOOR_H / 2f)
-        );
-
-        FixtureDef fd = new FixtureDef();
-        fd.shape = shape;
-        fd.friction = 0.8f;
-        fd.restitution = 0f;
-
-        Fixture fx = doorBody.createFixture(fd);
-        fx.setUserData("ground");
-
-        shape.dispose();
-
-        doorClosed = true;
-    }
-
-    private void openDoor() {
-        if (doorBody == null) return;
-
-        // Safety purge (in case any system tracked fixtures for this body)
-        combat.purgeForBody(doorBody);
-
-        physics.world.destroyBody(doorBody);
-        doorBody = null;
-        doorClosed = false;
+    private void spawnRanged(float x, float y) {
+        rangedEnemies.add(new RangedEnemy(physics.world, x, y));
+        CharacterAnimator a = new CharacterAnimator();
+        DebugAnimLibrary.defineMeleeEnemy(a); // reuso frames por ahora
+        rangedAnims.add(a);
     }
 
     @Override
@@ -194,6 +161,8 @@ public class GameplayScreen implements Screen {
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) debugOverlay = !debugOverlay;
         if (Gdx.input.isKeyJustPressed(Input.Keys.F2)) debugWorld = !debugWorld;
         if (Gdx.input.isKeyJustPressed(Input.Keys.B)) box2dDebugOn = !box2dDebugOn;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.H)) debugHitboxes = !debugHitboxes;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.U)) debugHurtboxes = !debugHurtboxes;
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.R)) initWorld();
 
@@ -209,7 +178,6 @@ public class GameplayScreen implements Screen {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         worldViewport.apply();
-
         renderWorld();
         renderOverlay();
 
@@ -219,12 +187,10 @@ public class GameplayScreen implements Screen {
     private void update(float delta) {
         combat.beginFrame();
 
-        // Player update
+        // Player
         player.update(delta, input);
 
-        // Spawn player attack hitbox (use your current Player implementation trigger)
-        // If your Player uses shouldSpawnAttackHitboxThisFrame(), prefer that.
-        // Here we keep compatibility with didStartAttackThisFrame() if you still have it.
+        // Player melee
         if (player.shouldSpawnAttackHitboxThisFrame()) {
             combat.spawnMeleeHitbox(
                 player.body,
@@ -236,14 +202,34 @@ public class GameplayScreen implements Screen {
             );
         }
 
-        // Enemies update + attacks + cleanup
-        for (int i = enemies.size - 1; i >= 0; i--) {
-            MeleeEnemy e = enemies.get(i);
+        // Player shoot (K)
+        if (input.isJustPressed(Action.SHOOT)) {
+            int damage = 1 + relics.getBonusProjectileDamage();
+            float startX = player.getXpx() + player.getFacingDir() * 14f;
+            float startY = player.getYpx() + 10f;
+
+            // velocidad en m/s
+            float vx = player.getFacingDir() * 8.5f;
+            float vy = 0f;
+
+            projectiles.spawn(new Projectile(
+                physics.world,
+                player.getFaction(),
+                damage,
+                startX, startY,
+                vx, vy,
+                1.2f
+            ));
+        }
+
+        // Melee enemies
+        for (int i = meleeEnemies.size - 1; i >= 0; i--) {
+            MeleeEnemy e = meleeEnemies.get(i);
             e.update(delta, player);
 
-            CharacterAnimator ea = enemyAnims.get(i);
-            ea.set(mapEnemyAnim(e));
-            ea.update(delta);
+            CharacterAnimator a = meleeAnims.get(i);
+            a.set(VisualMapper.enemyKey(e));
+            a.update(delta);
 
             if (e.didStartAttackThisFrame()) {
                 combat.spawnMeleeHitbox(
@@ -252,65 +238,97 @@ public class GameplayScreen implements Screen {
                     e.getFaction(),
                     e.getFacingDir(),
                     0,
-                    e.getDamage()
+                    1
                 );
             }
 
             if (!e.isAlive()) {
                 combat.purgeForBody(e.body);
                 physics.world.destroyBody(e.body);
-                enemies.removeIndex(i);
-                enemyAnims.removeIndex(i);
+                meleeEnemies.removeIndex(i);
+                meleeAnims.removeIndex(i);
+
+                // Drop chance (25%)
+                if (rng.nextFloat() < 0.25f) {
+                    pickups.add(new RelicPickup(physics.world, RelicType.BONUS_PROJECTILE_DAMAGE, e.getXpx(), e.getYpx()));
+                }
             }
         }
 
-        // Player animator update
-        playerAnim.set(mapPlayerAnim());
-        playerAnim.update(delta);
+        // Ranged enemies
+        for (int i = rangedEnemies.size - 1; i >= 0; i--) {
+            RangedEnemy e = rangedEnemies.get(i);
+            e.update(delta, player);
 
+            CharacterAnimator a = rangedAnims.get(i);
+            // Reuso de keys melee para simplificar visual: chase/telegraph/attack
+            a.set(AnimKey.ENEMY_CHASE);
+            a.update(delta);
+
+            if (e.didShootThisFrame()) {
+                float startX = e.getXpx() + e.getFacingDir() * 14f;
+                float startY = e.getYpx() + 10f;
+
+                float vx = e.getFacingDir() * 7.5f;
+                float vy = 0f;
+
+                projectiles.spawn(new Projectile(
+                    physics.world,
+                    e.getFaction(),
+                    1,
+                    startX, startY,
+                    vx, vy,
+                    1.4f
+                ));
+            }
+
+            if (!e.isAlive()) {
+                physics.world.destroyBody(e.body);
+                rangedEnemies.removeIndex(i);
+                rangedAnims.removeIndex(i);
+            }
+        }
+
+        // Update projectiles & pickups AFTER physics step
         combat.update(delta);
 
         physics.step(delta);
 
+        // projectile cleanup
+        projectiles.update(delta);
+
+        // pickup collection (flagged by listener)
+        for (int i = pickups.size - 1; i >= 0; i--) {
+            RelicPickup p = pickups.get(i);
+            if (p.collected) {
+                relics.add(p.type);
+                physics.world.destroyBody(p.body);
+                pickups.removeIndex(i);
+            }
+        }
+
         if (combat.hitThisFrame()) hitstopTimer = 0.05f;
 
-        // Encounter + door
-        encounter.update(delta, enemies.size);
-        if (encounter.getState() == EncounterManager.State.FIGHT) closeDoor();
-        else openDoor();
+        // Encounter
+        int enemiesAlive = meleeEnemies.size + rangedEnemies.size;
+        encounter.update(delta, enemiesAlive);
 
-        // Camera follow
+        // Camera
         float px = player.getXpx();
         float py = player.getYpx();
         worldCamera.position.x += (px - worldCamera.position.x) * 0.12f;
         worldCamera.position.y += ((py + 40f) - worldCamera.position.y) * 0.10f;
         worldCamera.update();
-    }
 
-    private AnimKey mapPlayerAnim() {
-        return switch (player.getState()) {
-            case RUN -> AnimKey.RUN;
-            case JUMP -> AnimKey.JUMP;
-            case FALL -> AnimKey.FALL;
-            case DASH -> AnimKey.DASH;
-            case ATTACK -> AnimKey.ATTACK_ACTIVE; // simplified preview
-            case HURT -> AnimKey.HURT;
-            default -> AnimKey.IDLE;
-        };
-    }
-
-    private AnimKey mapEnemyAnim(MeleeEnemy e) {
-        return switch (e.getState()) {
-            case CHASE -> AnimKey.ENEMY_CHASE;
-            case TELEGRAPH -> AnimKey.ENEMY_TELEGRAPH;
-            case ATTACK -> AnimKey.ENEMY_ATTACK;
-            case STAGGER -> AnimKey.ENEMY_STAGGER;
-            default -> AnimKey.ENEMY_IDLE;
-        };
+        // Player anim
+        playerAnim.set(VisualMapper.playerKey(player));
+        playerAnim.update(delta);
     }
 
     private void renderWorld() {
         shapes.setProjectionMatrix(worldCamera.combined);
+
+        // FILLED
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
         // Platforms
@@ -322,61 +340,93 @@ public class GameplayScreen implements Screen {
             }
         }
 
-        // Door visual
-        if (doorClosed) {
-            shapes.setColor(0.08f, 0.08f, 0.09f, 1f);
-            shapes.rect(DOOR_X - DOOR_W / 2f, DOOR_Y - DOOR_H / 2f, DOOR_W, DOOR_H);
+        // Pickups
+        shapes.setColor(0.10f, 0.45f, 0.10f, 1f);
+        for (RelicPickup p : pickups) {
+            shapes.circle(p.getXpx(), p.getYpx(), 6f, 16);
         }
 
-        // Enemies (frame-based)
-        for (int i = 0; i < enemies.size; i++) {
-            MeleeEnemy e = enemies.get(i);
-            CharacterAnimator ea = enemyAnims.get(i);
+        // Projectiles
+        shapes.setColor(0.10f, 0.10f, 0.10f, 1f);
+        for (Projectile pr : projectiles.projectiles) {
+            shapes.rect(pr.getXpx() - 3f, pr.getYpx() - 3f, 6f, 6f);
+        }
+
+        // Melee enemies
+        for (int i = 0; i < meleeEnemies.size; i++) {
+            MeleeEnemy e = meleeEnemies.get(i);
+            CharacterAnimator a = meleeAnims.get(i);
 
             float ex = e.getXpx();
-            float ey = e.getYpx() - 14f; // pivot at "feet" approx
+            float ey = e.getYpx() - 14f;
 
-            if (e.isFlashing()) {
-                shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
-            } else if (e.getState() == MeleeEnemy.State.TELEGRAPH) {
-                // lighten during telegraph
-                float a = e.getTelegraphAlpha();
+            if (e.isFlashing()) shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
+            else if (e.getState() == MeleeEnemy.State.TELEGRAPH) {
+                float al = e.getTelegraphAlpha();
                 float base = 0.14f;
-                float glow = 0.40f * a;
+                float glow = 0.40f * al;
                 float c = base + glow;
                 shapes.setColor(c, c, c, 1f);
-            } else {
-                shapes.setColor(0.12f, 0.12f, 0.16f, 1f);
-            }
+            } else shapes.setColor(0.12f, 0.12f, 0.16f, 1f);
 
-            debugCharRenderer.draw(shapes, ex, ey, e.getFacingDir(), ea.getFrame());
+            charRenderer.draw(shapes, ex, ey, e.getFacingDir(), a.getFrame());
         }
 
-        // Player (frame-based)
+        // Ranged enemies (color distinto)
+        for (int i = 0; i < rangedEnemies.size; i++) {
+            RangedEnemy e = rangedEnemies.get(i);
+            float ex = e.getXpx();
+            float ey = e.getYpx() - 14f;
+
+            if (e.isFlashing()) shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
+            else shapes.setColor(0.10f, 0.10f, 0.22f, 1f);
+
+            // rect simple por ahora
+            shapes.rect(ex - 10f, ey, 20f, 28f);
+        }
+
+        // Player
         float px = player.getXpx();
         float py = player.getYpx() - 16f;
 
         if (player.isFlashing()) shapes.setColor(0.02f, 0.02f, 0.02f, 1f);
         else shapes.setColor(0.10f, 0.10f, 0.12f, 1f);
 
-        debugCharRenderer.draw(shapes, px, py, player.getFacingDir(), playerAnim.getFrame());
+        charRenderer.draw(shapes, px, py, player.getFacingDir(), playerAnim.getFrame());
 
         shapes.end();
 
-        // Outlines
+        // LINES debug
+        shapes.begin(ShapeRenderer.ShapeType.Line);
+
         if (debugWorld && platformRects != null) {
-            shapes.begin(ShapeRenderer.ShapeType.Line);
             shapes.setColor(0.05f, 0.05f, 0.06f, 1f);
             for (LevelFactory.PlatformRect p : platformRects) {
                 shapes.rect(p.cx - p.w / 2f, p.cy - p.h / 2f, p.w, p.h);
             }
-            if (doorClosed) {
-                shapes.rect(DOOR_X - DOOR_W / 2f, DOOR_Y - DOOR_H / 2f, DOOR_W, DOOR_H);
-            }
-            shapes.end();
         }
 
-        // Box2D debug
+        if (debugHurtboxes) {
+            shapes.setColor(0.2f, 0.4f, 0.9f, 1f);
+            for (Fixture fx : player.body.getFixtureList()) {
+                if ("player_ground_sensor".equals(fx.getUserData())) continue;
+                debugPhysics.drawFixtureOutline(shapes, fx);
+            }
+            for (MeleeEnemy e : meleeEnemies) {
+                for (Fixture fx : e.body.getFixtureList()) debugPhysics.drawFixtureOutline(shapes, fx);
+            }
+            for (RangedEnemy e : rangedEnemies) {
+                for (Fixture fx : e.body.getFixtureList()) debugPhysics.drawFixtureOutline(shapes, fx);
+            }
+        }
+
+        if (debugHitboxes) {
+            shapes.setColor(0.9f, 0.2f, 0.2f, 1f);
+            for (Fixture fx : combat.getActiveHitboxFixtures()) debugPhysics.drawFixtureOutline(shapes, fx);
+        }
+
+        shapes.end();
+
         if (box2dDebugOn) {
             box2dMatrix.set(worldCamera.combined);
             box2dMatrix.scl(1f / PhysicsConstants.PPM);
@@ -391,21 +441,12 @@ public class GameplayScreen implements Screen {
         batch.begin();
 
         font.draw(batch, "FPS: " + Gdx.graphics.getFramesPerSecond(), 10, VIRTUAL_H - 10);
-        font.draw(batch, "Player HP: " + player.getHealth().getHp() + "/" + player.getHealth().getMaxHp(), 10, VIRTUAL_H - 28);
-        font.draw(batch, "Enemies: " + enemies.size, 10, VIRTUAL_H - 46);
-        font.draw(batch, "Encounter: " + encounter.getState(), 10, VIRTUAL_H - 64);
-
-        font.draw(batch, "PAnim: " + playerAnim.getCurrent() + " frame " + playerAnim.getFrameIndex(), 10, VIRTUAL_H - 82);
-
-        if (!player.isAlive()) {
-            font.draw(batch, "YOU DIED - Press R to restart", 180, 200);
-        } else if (encounter.shouldShowClearMessage()) {
-            font.draw(batch, "CLEAR!", 300, 200);
-        } else if (doorClosed) {
-            font.draw(batch, "DOOR LOCKED", 280, 200);
-        }
-
-        font.draw(batch, "F1 Overlay | F2 Outlines | B Box2D | R Restart", 10, 20);
+        font.draw(batch, "HP: " + player.getHealth().getHp() + "/" + player.getHealth().getMaxHp(), 10, VIRTUAL_H - 28);
+        font.draw(batch, "Enemies: " + (meleeEnemies.size + rangedEnemies.size), 10, VIRTUAL_H - 46);
+        font.draw(batch, "Relics: " + relics.getOwned().size, 10, VIRTUAL_H - 64);
+        font.draw(batch, "Projectile+DMG: +" + relics.getBonusProjectileDamage(), 10, VIRTUAL_H - 82);
+        font.draw(batch, "Encounter: " + encounter.getState(), 10, VIRTUAL_H - 100);
+        font.draw(batch, "K shoot | J melee | H hitboxes | U hurtboxes | R restart", 10, 20);
 
         batch.end();
     }
