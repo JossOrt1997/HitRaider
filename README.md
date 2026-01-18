@@ -44,15 +44,15 @@ Deberás sobrevivir a las tres ramas del destino Eldar:
 ---
 
 ## 🛠️ Especificaciones Técnicas
-* **Motor:** [Tu Motor, ej: Unity / Godot]
+* **Motor:** [libGDX]
 * **Estilo Visual:** Pixel Art fluido (Animaciones de 30-40 cuadros por acción).
 * **Género:** Roguelike / Beat 'em up.
 
 ---
 
 ## 👥 Equipo de Desarrollo
-* **Líder de Proyecto & Programación:** [Tu Nombre]
-* **Arte & Animación:** Kenia
+* **Líder de Proyecto & Programación:**
+* **Arte & Animación:** 
 * **Lore & Diseño de Sistemas:** Gemini AI (Partner de Brainstorming)
 
 ---
