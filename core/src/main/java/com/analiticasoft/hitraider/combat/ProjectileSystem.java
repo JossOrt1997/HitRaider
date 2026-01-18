@@ -8,6 +8,11 @@ public class ProjectileSystem {
     private final World world;
     public final Array<Projectile> projectiles = new Array<>();
 
+    private int impactsEnemyThisFrame = 0;
+    private int impactsWorldThisFrame = 0;
+
+    private int impactsFlushedThisFrame = 0;
+
     public ProjectileSystem(World world) {
         this.world = world;
     }
@@ -16,14 +21,68 @@ public class ProjectileSystem {
         projectiles.add(p);
     }
 
+    /** Llamado desde ContactListener: NO destruye bodies, solo marca. */
+    public void queueImpact(Projectile p) {
+        if (p == null) return;
+        if (p.state != Projectile.State.ALIVE) return;
+        p.impactQueued = true;
+    }
+
+    /** ContactListener: cuenta impactos por tipo */
+    public void notifyImpactEnemy() { impactsEnemyThisFrame++; }
+    public void notifyImpactWorld() { impactsWorldThisFrame++; }
+
+    /** GameplayScreen consume contadores */
+    public int consumeImpactsEnemy() {
+        int v = impactsEnemyThisFrame;
+        impactsEnemyThisFrame = 0;
+        return v;
+    }
+
+    public int consumeImpactsWorld() {
+        int v = impactsWorldThisFrame;
+        impactsWorldThisFrame = 0;
+        return v;
+    }
+
+    /** (opcional) cuántos impacts se flushearon (por debug) */
+    public int getImpactsFlushedThisFrame() {
+        return impactsFlushedThisFrame;
+    }
+
+    /** Llamar UNA VEZ por frame, DESPUÉS de physics.step(delta). */
+    public void flushImpacts() {
+        impactsFlushedThisFrame = 0;
+
+        for (Projectile p : projectiles) {
+            if (p.state == Projectile.State.ALIVE && p.impactQueued) {
+                // captura pos final justo antes de destruir
+                if (p.body.getWorld() != null) {
+                    p.lastXpx = com.analiticasoft.hitraider.physics.PhysicsConstants.toPixels(p.body.getPosition().x);
+                    p.lastYpx = com.analiticasoft.hitraider.physics.PhysicsConstants.toPixels(p.body.getPosition().y);
+                    world.destroyBody(p.body);
+                }
+                p.beginImpactFx();
+                p.impactQueued = false;
+                impactsFlushedThisFrame++;
+            }
+        }
+    }
+
     public void update(float delta) {
         for (int i = projectiles.size - 1; i >= 0; i--) {
             Projectile p = projectiles.get(i);
-            p.timeLeft -= delta;
-            if (p.dead || p.timeLeft <= 0f) {
-                // destruir body de manera segura
-                if (p.body.getWorld() != null) world.destroyBody(p.body);
-                projectiles.removeIndex(i);
+
+            if (p.state == Projectile.State.ALIVE) {
+                p.tickAlive(delta);
+
+                if (p.timeLeft <= 0f) {
+                    if (p.body.getWorld() != null) world.destroyBody(p.body);
+                    projectiles.removeIndex(i);
+                }
+            } else {
+                p.tickImpact(delta);
+                if (p.impactDone()) projectiles.removeIndex(i);
             }
         }
     }

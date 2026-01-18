@@ -22,9 +22,9 @@ public class RangedEnemy implements Damageable {
     private boolean shotThisFrame = false;
     private int facingDir = 1;
 
-    // Tuning (ajustable)
-    private static final float AGGRO_RANGE_PX = 320f;
-    private static final float KEEP_DISTANCE_PX = 150f;
+    // tuning
+    private static final float AGGRO_RANGE_PX = 340f;
+    private static final float KEEP_DISTANCE_PX = 160f;
     private static final float KITE_SPEED = 1.6f;      // m/s
     private static final float TELEGRAPH_TIME = 0.20f;
     private static final float COOLDOWN_TIME = 0.55f;
@@ -85,9 +85,7 @@ public class RangedEnemy implements Damageable {
         switch (state) {
             case IDLE -> {
                 body.setLinearVelocity(0f, body.getLinearVelocity().y);
-                if (dist <= AGGRO_RANGE_PX) {
-                    state = State.KITE;
-                }
+                if (dist <= AGGRO_RANGE_PX) state = State.KITE;
             }
             case KITE -> {
                 if (dist > AGGRO_RANGE_PX) {
@@ -95,7 +93,6 @@ public class RangedEnemy implements Damageable {
                     break;
                 }
 
-                // Mantener distancia: si estás cerca, huye. Si estás lejos, se prepara a disparar.
                 Vector2 v = body.getLinearVelocity();
 
                 if (dist < KEEP_DISTANCE_PX) {
@@ -130,6 +127,12 @@ public class RangedEnemy implements Damageable {
     public boolean didShootThisFrame() { return shotThisFrame; }
     public int getFacingDir() { return facingDir; }
     public State getState() { return state; }
+
+    public float getTelegraphAlpha() {
+        if (state != State.TELEGRAPH) return 0f;
+        float t = Math.max(0f, telegraphTimer) / TELEGRAPH_TIME;
+        return 1f - t;
+    }
 
     public float getXpx() { return PhysicsConstants.toPixels(body.getPosition().x); }
     public float getYpx() { return PhysicsConstants.toPixels(body.getPosition().y); }

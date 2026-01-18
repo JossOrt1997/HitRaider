@@ -3,16 +3,38 @@ package com.analiticasoft.hitraider.combat;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.badlogic.gdx.physics.box2d.*;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 public class Projectile {
 
+    private static final AtomicLong SEQ = new AtomicLong(1);
+
+    public enum State { ALIVE, IMPACT }
+
+    public final long id;
     public final Body body;
     public final Faction faction;
     public final int damage;
 
-    public float timeLeft;
-    public boolean dead = false;
+    public State state = State.ALIVE;
 
-    public Projectile(World world, Faction faction, int damage, float xPx, float yPx, float vxMps, float vyMps, float lifetimeSec) {
+    public float timeLeft;
+    public float hitLock = 0f;
+
+    public float lastXpx;
+    public float lastYpx;
+
+    public float impactFxLeft = 0f;
+
+    // ✅ NEW: queued impact (processed after world.step)
+    public boolean impactQueued = false;
+
+    public Projectile(World world, Faction faction, int damage,
+                      float xPx, float yPx,
+                      float vxMps, float vyMps,
+                      float lifetimeSec) {
+
+        this.id = SEQ.getAndIncrement();
         this.faction = faction;
         this.damage = damage;
         this.timeLeft = lifetimeSec;
@@ -38,8 +60,30 @@ public class Projectile {
 
         body.setGravityScale(0f);
         body.setLinearVelocity(vxMps, vyMps);
+
+        lastXpx = xPx;
+        lastYpx = yPx;
     }
 
-    public float getXpx() { return PhysicsConstants.toPixels(body.getPosition().x); }
-    public float getYpx() { return PhysicsConstants.toPixels(body.getPosition().y); }
+    public void tickAlive(float delta) {
+        if (hitLock > 0f) hitLock = Math.max(0f, hitLock - delta);
+
+        lastXpx = PhysicsConstants.toPixels(body.getPosition().x);
+        lastYpx = PhysicsConstants.toPixels(body.getPosition().y);
+
+        timeLeft -= delta;
+    }
+
+    public void beginImpactFx() {
+        state = State.IMPACT;
+        impactFxLeft = 0.10f;
+    }
+
+    public void tickImpact(float delta) {
+        impactFxLeft = Math.max(0f, impactFxLeft - delta);
+    }
+
+    public boolean impactDone() {
+        return impactFxLeft <= 0f;
+    }
 }

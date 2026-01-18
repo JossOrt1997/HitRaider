@@ -24,7 +24,6 @@ public class CombatSystem {
         final Body ownerBody;
         final Fixture fixture;
         final Hitbox hitbox;
-
         ActiveHitbox(Body ownerBody, Fixture fixture, Hitbox hitbox) {
             this.ownerBody = ownerBody;
             this.fixture = fixture;
@@ -35,29 +34,55 @@ public class CombatSystem {
     private final List<ActiveHitbox> active = new ArrayList<>();
     private boolean hitThisFrame = false;
 
+    // ✅ Impact flags
+    private boolean playerHurtThisFrame = false;
+    private boolean enemyHurtThisFrame = false;
+    private boolean meleeWorldHitThisFrame = false;
+
     public CombatSystem(World world) {
         this.world = world;
     }
 
     public void beginFrame() {
         hitThisFrame = false;
+        playerHurtThisFrame = false;
+        enemyHurtThisFrame = false;
+        meleeWorldHitThisFrame = false;
     }
 
-    public boolean hitThisFrame() {
-        return hitThisFrame;
+    public boolean hitThisFrame() { return hitThisFrame; }
+
+    public boolean consumePlayerHurt() {
+        boolean v = playerHurtThisFrame;
+        playerHurtThisFrame = false;
+        return v;
     }
 
-    /** Para debug: fixtures de hitbox actualmente activas (solo lectura) */
+    public boolean consumeEnemyHurt() {
+        boolean v = enemyHurtThisFrame;
+        enemyHurtThisFrame = false;
+        return v;
+    }
+
+    public boolean consumeMeleeWorldHit() {
+        boolean v = meleeWorldHitThisFrame;
+        meleeWorldHitThisFrame = false;
+        return v;
+    }
+
+    /** ContactListener: melee hitbox tocó mundo */
+    public void notifyMeleeWorldHit() {
+        meleeWorldHitThisFrame = true;
+    }
+
     public List<Fixture> getActiveHitboxFixtures() {
         List<Fixture> out = new ArrayList<>(active.size());
         for (ActiveHitbox ah : active) out.add(ah.fixture);
         return out;
     }
 
-    /** Llamar antes de destruir un Body para evitar crashes por fixtures activas */
     public void purgeForBody(Body body) {
         if (body == null) return;
-
         Iterator<ActiveHitbox> it = active.iterator();
         while (it.hasNext()) {
             ActiveHitbox ah = it.next();
@@ -126,10 +151,8 @@ public class CombatSystem {
     private void safeDestroyFixture(Body body, Fixture fixture) {
         if (body == null || fixture == null) return;
         if (body.getWorld() == null) return;
-
         if (!body.getFixtureList().contains(fixture, true)) return;
         if (body.getFixtureList().size == 0) return;
-
         body.destroyFixture(fixture);
     }
 
@@ -143,7 +166,9 @@ public class CombatSystem {
         if (!(otherUD instanceof Damageable target)) return;
         if (!target.isAlive()) return;
 
+        // friendly fire off
         if (target.getFaction() == hb.ownerFaction) return;
+
         if (!hb.canHit(target)) return;
 
         float hx = hitboxFix.getBody().getPosition().x;
@@ -154,11 +179,16 @@ public class CombatSystem {
         target.applyDamage(hb.damage, knock);
         hb.markHit(target);
 
+        // recoil attacker
         if (hb.owner != null && hb.owner.isAlive()) {
             Body ownerBody = hitboxFix.getBody();
             Vector2 ov = ownerBody.getLinearVelocity();
             ownerBody.setLinearVelocity(ov.x - dir * ATTACKER_RECOIL_X, ov.y + ATTACKER_RECOIL_Y);
         }
+
+        // ✅ classify impact
+        if (target.getFaction() == Faction.PLAYER) playerHurtThisFrame = true;
+        if (target.getFaction() == Faction.ENEMY) enemyHurtThisFrame = true;
 
         hitThisFrame = true;
     }
