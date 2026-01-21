@@ -25,9 +25,10 @@ public class Projectile {
     public float lastYpx;
 
     public float impactFxLeft = 0f;
-
-    // ✅ NEW: queued impact (processed after world.step)
     public boolean impactQueued = false;
+
+    // ✅ NEW: piercing
+    public int piercesLeft = 0;
 
     public Projectile(World world, Faction faction, int damage,
                       float xPx, float yPx,

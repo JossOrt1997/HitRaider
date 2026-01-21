@@ -25,7 +25,6 @@ public class GameContactListener implements ContactListener {
         if (isGroundSensor(b) && isGroundLike(a)) incGroundContacts(b);
 
         if (Hitbox.isHitboxFixture(a)) {
-            // melee vs world
             if (isGroundLike(b)) combat.notifyMeleeWorldHit();
             combat.handleHitboxContact(a, b);
         }
@@ -86,7 +85,7 @@ public class GameContactListener implements ContactListener {
         Object oud = otherFix.getUserData();
 
         // hit world
-        if (isGroundLikeUserData(oud)) {
+        if ("ground".equals(oud) || "oneway".equals(oud)) {
             p.hitLock = 0.05f;
             projectiles.queueImpact(p);
             projectiles.notifyImpactWorld();
@@ -94,18 +93,21 @@ public class GameContactListener implements ContactListener {
         }
 
         if (!(oud instanceof Damageable target)) return;
-
         if (target.getFaction() == p.faction) return;
 
         target.applyDamage(p.damage, new Vector2(0, 0));
+        projectiles.notifyImpactEnemy();
 
+        // piercing logic
+        if (p.piercesLeft > 0) {
+            p.piercesLeft--;
+            p.hitLock = 0.06f; // pequeño lock para evitar doble-hit instantáneo
+            return;
+        }
+
+        // normal impact
         p.hitLock = 0.05f;
         projectiles.queueImpact(p);
-        projectiles.notifyImpactEnemy();
-    }
-
-    private boolean isGroundLikeUserData(Object ud) {
-        return "ground".equals(ud) || "oneway".equals(ud);
     }
 
     private void handleRelicPickup(Fixture pickupFix, Fixture otherFix) {
@@ -131,7 +133,6 @@ public class GameContactListener implements ContactListener {
     private boolean isGround(Fixture f) { return f != null && "ground".equals(f.getUserData()); }
     private boolean isOneWay(Fixture f) { return f != null && "oneway".equals(f.getUserData()); }
     private boolean isGroundLike(Fixture f) { return isGround(f) || isOneWay(f); }
-    private boolean isGroundLikeUserDataFixture(Fixture f) { return isGroundLike(f); }
 
     private void incGroundContacts(Fixture sensor) {
         Object ud = sensor.getBody().getUserData();

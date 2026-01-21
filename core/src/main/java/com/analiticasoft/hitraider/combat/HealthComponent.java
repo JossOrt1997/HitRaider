@@ -6,8 +6,6 @@ public class HealthComponent {
 
     private float invulnTimer = 0f;
     private float flashTimer = 0f;
-
-    // NEW: stun / stagger timer (seconds)
     private float stunTimer = 0f;
 
     public HealthComponent(int maxHp) {
@@ -21,37 +19,14 @@ public class HealthComponent {
         if (stunTimer > 0f) stunTimer = Math.max(0f, stunTimer - delta);
     }
 
-    public boolean isAlive() {
-        return hp > 0;
-    }
+    public boolean isAlive() { return hp > 0; }
+    public int getHp() { return hp; }
+    public int getMaxHp() { return maxHp; }
 
-    public int getHp() {
-        return hp;
-    }
+    public boolean isInvulnerable() { return invulnTimer > 0f; }
+    public boolean isFlashing() { return flashTimer > 0f; }
+    public boolean isStunned() { return stunTimer > 0f; }
 
-    public int getMaxHp() {
-        return maxHp;
-    }
-
-    public boolean isInvulnerable() {
-        return invulnTimer > 0f;
-    }
-
-    public boolean isFlashing() {
-        return flashTimer > 0f;
-    }
-
-    public boolean isStunned() {
-        return stunTimer > 0f;
-    }
-
-    public float getStunTimer() {
-        return stunTimer;
-    }
-
-    /**
-     * Devuelve true si aplicó daño (no estaba invulnerable).
-     */
     public boolean tryDamage(int amount, float invulnSeconds, float flashSeconds, float stunSeconds) {
         if (!isAlive()) return false;
         if (isInvulnerable()) return false;
@@ -64,5 +39,13 @@ public class HealthComponent {
         stunTimer = Math.max(stunTimer, stunSeconds);
 
         return true;
+    }
+
+    public void heal(int amount) {
+        if (!isAlive()) return;
+        hp += amount;
+        if (hp > maxHp) hp = maxHp;
+        // pequeño flash opcional
+        flashTimer = Math.max(flashTimer, 0.06f);
     }
 }

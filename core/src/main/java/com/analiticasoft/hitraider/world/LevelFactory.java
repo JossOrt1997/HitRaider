@@ -8,14 +8,12 @@ public class LevelFactory {
 
     public static class PlatformRect {
         public final float cx, cy, w, h;
-        public final String type; // "ground" o "oneway"
-
+        public final String type; // "ground" / "oneway"
         public PlatformRect(float cx, float cy, float w, float h, String type) {
             this.cx = cx; this.cy = cy; this.w = w; this.h = h; this.type = type;
         }
     }
 
-    /** Crea el nivel en Box2D y regresa rectángulos para dibujarlo en pixeles */
     public static Array<PlatformRect> createTestLevel(World world) {
         Array<PlatformRect> rects = new Array<>();
 

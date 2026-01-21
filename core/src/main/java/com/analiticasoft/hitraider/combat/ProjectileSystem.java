@@ -11,52 +11,28 @@ public class ProjectileSystem {
     private int impactsEnemyThisFrame = 0;
     private int impactsWorldThisFrame = 0;
 
-    private int impactsFlushedThisFrame = 0;
-
     public ProjectileSystem(World world) {
         this.world = world;
     }
 
-    public void spawn(Projectile p) {
-        projectiles.add(p);
-    }
+    public void spawn(Projectile p) { projectiles.add(p); }
 
-    /** Llamado desde ContactListener: NO destruye bodies, solo marca. */
     public void queueImpact(Projectile p) {
         if (p == null) return;
         if (p.state != Projectile.State.ALIVE) return;
         p.impactQueued = true;
     }
 
-    /** ContactListener: cuenta impactos por tipo */
     public void notifyImpactEnemy() { impactsEnemyThisFrame++; }
     public void notifyImpactWorld() { impactsWorldThisFrame++; }
 
-    /** GameplayScreen consume contadores */
-    public int consumeImpactsEnemy() {
-        int v = impactsEnemyThisFrame;
-        impactsEnemyThisFrame = 0;
-        return v;
-    }
+    public int consumeImpactsEnemy() { int v = impactsEnemyThisFrame; impactsEnemyThisFrame = 0; return v; }
+    public int consumeImpactsWorld() { int v = impactsWorldThisFrame; impactsWorldThisFrame = 0; return v; }
 
-    public int consumeImpactsWorld() {
-        int v = impactsWorldThisFrame;
-        impactsWorldThisFrame = 0;
-        return v;
-    }
-
-    /** (opcional) cuántos impacts se flushearon (por debug) */
-    public int getImpactsFlushedThisFrame() {
-        return impactsFlushedThisFrame;
-    }
-
-    /** Llamar UNA VEZ por frame, DESPUÉS de physics.step(delta). */
+    /** Debe llamarse DESPUÉS de physics.step(delta) */
     public void flushImpacts() {
-        impactsFlushedThisFrame = 0;
-
         for (Projectile p : projectiles) {
             if (p.state == Projectile.State.ALIVE && p.impactQueued) {
-                // captura pos final justo antes de destruir
                 if (p.body.getWorld() != null) {
                     p.lastXpx = com.analiticasoft.hitraider.physics.PhysicsConstants.toPixels(p.body.getPosition().x);
                     p.lastYpx = com.analiticasoft.hitraider.physics.PhysicsConstants.toPixels(p.body.getPosition().y);
@@ -64,7 +40,6 @@ public class ProjectileSystem {
                 }
                 p.beginImpactFx();
                 p.impactQueued = false;
-                impactsFlushedThisFrame++;
             }
         }
     }
