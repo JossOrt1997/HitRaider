@@ -48,7 +48,11 @@ public class GameplayScreen implements Screen {
     private final HudRenderer hudRenderer = new HudRenderer();
 
     // Debug flags
-    private boolean debugOverlay = true;
+    //private boolean debugOverlay = true;
+
+    private boolean hudEssentialOn = true;
+    private boolean hudInfoOn = true;
+
     private boolean debugHitboxes = true;
     private boolean debugHurtboxes = true;
 
@@ -115,7 +119,15 @@ public class GameplayScreen implements Screen {
         inputProvider.poll(input);
 
         // toggles
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F1) || Gdx.input.isKeyJustPressed(Input.Keys.TAB)) debugOverlay = !debugOverlay;
+        //if (Gdx.input.isKeyJustPressed(Input.Keys.F1) || Gdx.input.isKeyJustPressed(Input.Keys.TAB)) debugOverlay = !debugOverlay;
+        //if (Gdx.input.isKeyJustPressed(Input.Keys.H)) debugHitboxes = !debugHitboxes;
+        //if (Gdx.input.isKeyJustPressed(Input.Keys.U)) debugHurtboxes = !debugHurtboxes;
+
+        // HUD toggles
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F1) || Gdx.input.isKeyJustPressed(Input.Keys.TAB)) hudEssentialOn = !hudEssentialOn;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F2)) hudInfoOn = !hudInfoOn;
+
+// Debug toggles
         if (Gdx.input.isKeyJustPressed(Input.Keys.H)) debugHitboxes = !debugHitboxes;
         if (Gdx.input.isKeyJustPressed(Input.Keys.U)) debugHurtboxes = !debugHurtboxes;
 
@@ -137,7 +149,7 @@ public class GameplayScreen implements Screen {
         worldViewport.apply();
 
         renderWorld();
-        if (debugOverlay) renderUI();
+        if (hudEssentialOn || hudInfoOn) renderUI();
 
         input.endFrame();
     }
@@ -469,48 +481,101 @@ public class GameplayScreen implements Screen {
     }
 
     private void renderUI() {
-        // hp bar + fade overlay
+        // --- UI SHAPES (panels, hp bar, fade) ---
         shapes.setProjectionMatrix(uiCamera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        float barX = 10f, barY = GameConfig.VIRTUAL_H - 26f, barW = 200f, barH = 10f;
-        int hp = run.player.getHealth().getHp();
-        int maxHp = run.player.getHealth().getMaxHp();
-        float pct = (maxHp <= 0) ? 0f : (hp / (float) maxHp);
-        pct = Math.max(0f, Math.min(1f, pct));
-
-        shapes.setColor(0.10f, 0.10f, 0.12f, 1f);
-        shapes.rect(barX, barY, barW, barH);
-
-        shapes.setColor(0.20f, 0.75f, 0.25f, 1f);
-        shapes.rect(barX, barY, barW * pct, barH);
-
+        // Fade overlay
         if (transition.fade > 0f) {
             shapes.setColor(0f, 0f, 0f, transition.fade);
-            shapes.rect(0, 0, GameConfig.VIRTUAL_W, GameConfig.VIRTUAL_H);
+            shapes.rect(0, 0, com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_W,
+                com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H);
+        }
+
+        // Essential panel (top-left)
+        /*if (hudEssentialOn) {
+            shapes.setColor(0.10f, 0.10f, 0.12f, 0.85f);
+            shapes.rect(8, com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 58, 260, 50);
+        }
+
+        // Info panel (top-right)
+        if (hudInfoOn) {
+            shapes.setColor(0.10f, 0.10f, 0.12f, 0.85f);
+            shapes.rect(com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_W - 260,
+                com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 138,
+                252, 130);
+        }/*/
+
+        // HP bar (inside essential)
+        if (hudEssentialOn) {
+            float barX = 16f;
+            float barY = com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 28f;
+            float barW = 190f;
+            float barH = 10f;
+
+            int hp = run.player.getHealth().getHp();
+            int maxHp = run.player.getHealth().getMaxHp();
+            float pct = (maxHp <= 0) ? 0f : (hp / (float) maxHp);
+            pct = Math.max(0f, Math.min(1f, pct));
+
+            // background
+            shapes.setColor(0.06f, 0.06f, 0.07f, 1f);
+            shapes.rect(barX, barY, barW, barH);
+
+            // fill
+            shapes.setColor(0.20f, 0.75f, 0.25f, 1f);
+            shapes.rect(barX, barY, barW * pct, barH);
+
+            // border
+            shapes.setColor(0.02f, 0.02f, 0.02f, 1f);
+            shapes.rect(barX, barY, barW, 1f);
+            shapes.rect(barX, barY + barH - 1f, barW, 1f);
+            shapes.rect(barX, barY, 1f, barH);
+            shapes.rect(barX + barW - 1f, barY, 1f, barH);
         }
 
         shapes.end();
 
+        // --- UI TEXT ---
         batch.setProjectionMatrix(uiCamera.combined);
         batch.begin();
 
-        RoomInstance room = run.run.current();
+        // Essential text
+        if (hudEssentialOn) {
+            int hp = run.player.getHealth().getHp();
+            int maxHp = run.player.getHealth().getMaxHp();
+            int enemiesAlive = run.meleeEnemies.size + run.rangedEnemies.size;
 
-        hudRenderer.drawHeader(batch, font, run.run, room);
-        hudRenderer.drawRelics(batch, font, run.relics);
+            var room = run.run.current();
 
-        font.draw(batch, "HP: " + hp + "/" + maxHp, 10, GameConfig.VIRTUAL_H - 92);
-        font.draw(batch, "Enemies: " + (run.meleeEnemies.size + run.rangedEnemies.size), 260, GameConfig.VIRTUAL_H - 92);
+            font.draw(batch, "HP " + hp + "/" + maxHp, 16, com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 14);
+            font.draw(batch, "Enemies: " + enemiesAlive, 220, com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 14);
 
-        font.draw(batch, "K shoot | J melee | R new run | F1/TAB overlay | H/U debug", 10, 20);
+            font.draw(batch,
+                "Room: " + (run.run.index + 1) + "/" + run.run.totalRooms + " [" + room.type + "]",
+                16, com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 40);
 
-        if (room.type == RoomType.CHOICE && run.inChoiceRoom) {
-            hudPainter.drawFadingText(batch, font, "CHOOSE ONE RELIC", 250, 220, 1f);
+            font.draw(batch, "Relics: " + run.relics.getOwned().size, 190, com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 40);
         }
 
-        if (!run.player.isAlive()) {
-            hudPainter.drawFadingText(batch, font, "YOU DIED - Press R", 240, 200, 1f);
+        // Info/Debug text
+        if (hudInfoOn) {
+            float x = com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_W - 250f;
+            float y = com.analiticasoft.hitraider.config.GameConfig.VIRTUAL_H - 16f;
+
+            int fps = Gdx.graphics.getFramesPerSecond();
+            var room = run.run.current();
+
+            font.draw(batch, "FPS: " + fps, x, y); y -= 18;
+            font.draw(batch, "Seed: " + run.run.seed, x, y); y -= 18;
+            font.draw(batch, "Tpl: " + room.template.id, x, y); y -= 18;
+            font.draw(batch, "Type: " + room.type + "  Budget: " + room.budget, x, y); y -= 18;
+            font.draw(batch, "Plan M:" + room.meleeCount + " R:" + room.rangedCount, x, y); y -= 18;
+
+            font.draw(batch, String.format("ShootCD: %.2f", run.shootCooldown), x, y); y -= 18;
+            font.draw(batch, "ChoiceRoom: " + run.inChoiceRoom, x, y); y -= 18;
+
+            font.draw(batch, "F1 Essential | F2 Info | H hitbox | U hurtbox", x, 20);
         }
 
         batch.end();
