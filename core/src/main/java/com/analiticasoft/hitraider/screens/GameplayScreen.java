@@ -1,19 +1,22 @@
 package com.analiticasoft.hitraider.screens;
 
-import com.analiticasoft.hitraider.combat.*;
+import com.analiticasoft.hitraider.combat.Projectile;
+import com.analiticasoft.hitraider.combat.Faction;
+import com.analiticasoft.hitraider.relics.RelicType;
+import com.analiticasoft.hitraider.config.*;
+import com.analiticasoft.hitraider.controllers.*;
 import com.analiticasoft.hitraider.entities.MeleeEnemy;
-import com.analiticasoft.hitraider.entities.Player;
 import com.analiticasoft.hitraider.entities.RangedEnemy;
 import com.analiticasoft.hitraider.input.Action;
 import com.analiticasoft.hitraider.input.DesktopInputProvider;
 import com.analiticasoft.hitraider.input.InputState;
-import com.analiticasoft.hitraider.physics.GameContactListener;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
-import com.analiticasoft.hitraider.physics.PhysicsWorld;
+import com.analiticasoft.hitraider.relics.RelicPickup;
 import com.analiticasoft.hitraider.render.*;
-import com.analiticasoft.hitraider.relics.*;
 import com.analiticasoft.hitraider.ui.HudPainter;
-import com.analiticasoft.hitraider.world.*;
+import com.analiticasoft.hitraider.ui.HudRenderer;
+import com.analiticasoft.hitraider.world.RoomInstance;
+import com.analiticasoft.hitraider.world.RoomType;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
@@ -22,104 +25,69 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.*;
-import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.physics.box2d.BodyDef;
+import com.badlogic.gdx.physics.box2d.Fixture;
+import com.badlogic.gdx.physics.box2d.FixtureDef;
+import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
-import java.util.Random;
-
 public class GameplayScreen implements Screen {
 
-    private static final float VIRTUAL_W = 640f;
-    private static final float VIRTUAL_H = 360f;
-
+    // Cameras
     private OrthographicCamera worldCamera;
     private Viewport worldViewport;
     private OrthographicCamera uiCamera;
 
+    // Render
     private ShapeRenderer shapes;
     private SpriteBatch batch;
     private BitmapFont font;
 
-    private final HudPainter hud = new HudPainter();
+    private final HudPainter hudPainter = new HudPainter();
+    private final HudRenderer hudRenderer = new HudRenderer();
 
+    // Debug flags
     private boolean debugOverlay = true;
     private boolean debugHitboxes = true;
     private boolean debugHurtboxes = true;
 
+    // Input
     private final InputState input = new InputState();
     private final DesktopInputProvider inputProvider = new DesktopInputProvider();
 
-    private PhysicsWorld physics;
-    private CombatSystem combat;
-    private ProjectileSystem projectiles;
-    private GameContactListener contactListener;
+    // Controllers
+    private final RunController run = new RunController();
+    private final CameraController cameraController = new CameraController();
+    private final ShakeController shake = new ShakeController();
+    private final TransitionController transition = new TransitionController();
 
-    private Array<LevelFactory.PlatformRect> platformRects;
-
-    private Player player;
-    private final Array<MeleeEnemy> meleeEnemies = new Array<>();
-    private final Array<RangedEnemy> rangedEnemies = new Array<>();
-
-    private final EncounterManager encounter = new EncounterManager();
-
-    private Body doorBody;
-    private boolean doorClosed = false;
-    private static final float DOOR_W = 28f;
-    private static final float DOOR_H = 220f;
-
+    // Visuals
     private final CharacterRenderer charRenderer = new DebugCharacterRenderer();
     private final DebugPhysicsRenderer debugPhysics = new DebugPhysicsRenderer();
     private CharacterAnimator playerAnim;
-    private final Array<CharacterAnimator> meleeAnims = new Array<>();
-    private final Array<CharacterAnimator> rangedAnims = new Array<>();
 
-    private final RelicManager relics = new RelicManager();
-    private final Array<RelicPickup> pickups = new Array<>();
-    private final Random rng = new Random();
+    // Door state (kept in screen to keep Box2D body lifecycle simple)
+    private com.badlogic.gdx.physics.box2d.Body doorBody;
+    private boolean doorClosed = false;
 
-    // Week7 run
-    private final RunManager run = new RunManager();
-    private final RoomTemplateRegistry templates = new RoomTemplateRegistry();
-    private final RoomInstanceGenerator generator = new RoomInstanceGenerator();
-    private final DropRules dropRules = new DropRules();
-    private Array<RoomInstance> runRooms;
+    // Feel
+    private float hitstopTimer = 0f;
 
-    private boolean relicDroppedThisRoom = false;
-
-    // choice
-    private boolean inChoiceRoom = false;
-
-    // lifesteal
+    // Lifesteal hit counter
     private int meleeHitCounter = 0;
 
-    // shoot cooldown
-    private float shootCooldown = 0f;
-    private static final float SHOOT_BASE_COOLDOWN = 0.28f;
+    private boolean restartRequested = false;
 
-    // polish
-    private float hitstopTimer = 0f;
-    private float shakeTimer = 0f;
-    private float shakeIntensity = 0f;
-    private float shakeSeed = 0f;
-
-    private float fade = 0f;
-    private boolean transitioning = false;
-    private float transitionTimer = 0f;
-    private boolean transitionToNextRoom = false;
-
-    private float clearTextTimer = 0f;
 
     @Override
     public void show() {
         worldCamera = new OrthographicCamera();
-        worldViewport = new FitViewport(VIRTUAL_W, VIRTUAL_H, worldCamera);
+        worldViewport = new FitViewport(GameConfig.VIRTUAL_W, GameConfig.VIRTUAL_H, worldCamera);
         worldViewport.apply(true);
 
         uiCamera = new OrthographicCamera();
-        uiCamera.setToOrtho(false, VIRTUAL_W, VIRTUAL_H);
+        uiCamera.setToOrtho(false, GameConfig.VIRTUAL_W, GameConfig.VIRTUAL_H);
         uiCamera.update();
 
         shapes = new ShapeRenderer();
@@ -130,162 +98,31 @@ public class GameplayScreen implements Screen {
         playerAnim = new CharacterAnimator();
         DebugAnimLibrary.definePlayer(playerAnim);
 
-        buildTemplates();
-        startNewRun(true);
+        run.buildTemplates();
+        run.startNewRun(true);
 
-        worldCamera.position.set(VIRTUAL_W / 2f, VIRTUAL_H / 2f, 0f);
+        transition.startFadeIn();
+
+        worldCamera.position.set(GameConfig.VIRTUAL_W / 2f, GameConfig.VIRTUAL_H / 2f, 0f);
         worldCamera.update();
-    }
 
-    private void buildTemplates() {
-        templates.clear();
-
-        RoomTemplate arena = new RoomTemplate("arena", 120f, 140f, 1120f)
-            .addSpawn(520f, 220f).addSpawn(650f, 220f).addSpawn(820f, 220f).addSpawn(950f, 220f).addSpawn(1040f, 220f);
-
-        RoomTemplate platforms = new RoomTemplate("platforms", 120f, 140f, 1120f)
-            .addSpawn(520f, 260f).addSpawn(650f, 260f).addSpawn(820f, 220f).addSpawn(950f, 220f).addSpawn(1040f, 220f);
-
-        RoomTemplate hall = new RoomTemplate("hall", 120f, 140f, 1120f)
-            .addSpawn(520f, 220f).addSpawn(650f, 220f).addSpawn(760f, 220f).addSpawn(880f, 220f).addSpawn(1000f, 220f);
-
-        templates.add(arena);
-        templates.add(platforms);
-        templates.add(hall);
-    }
-
-    private void startNewRun(boolean rebuildPhysics) {
-        long seed = System.currentTimeMillis();
-        int totalRooms = 12;
-
-        runRooms = generator.generate(seed, totalRooms, templates);
-        run.start(seed, totalRooms, runRooms);
-
-        loadCurrentRoom(rebuildPhysics);
-    }
-
-    private void loadCurrentRoom(boolean rebuildPhysics) {
-        if (rebuildPhysics) {
-            if (physics != null) physics.dispose();
-            physics = new PhysicsWorld(new Vector2(0f, -25f));
-            combat = new CombatSystem(physics.world);
-            projectiles = new ProjectileSystem(physics.world);
-
-            contactListener = new GameContactListener(combat, projectiles);
-            physics.world.setContactListener(contactListener);
-
-            platformRects = LevelFactory.createTestLevel(physics.world);
-            player = new Player(physics.world, 120f, 140f);
-        }
-
-        meleeEnemies.clear();
-        rangedEnemies.clear();
-        meleeAnims.clear();
-        rangedAnims.clear();
-        pickups.clear();
-
-        relicDroppedThisRoom = false;
-        inChoiceRoom = false;
-
-        doorBody = null;
-        doorClosed = false;
-
-        RoomInstance room = run.current();
-
-        // place player
-        player.body.setTransform(PhysicsConstants.toMeters(room.template.entryXpx), PhysicsConstants.toMeters(room.template.entryYpx), 0f);
-        player.body.setLinearVelocity(0f, 0f);
-
-        // CHOICE room: no enemies, 2 relics
-        if (room.type == RoomType.CHOICE) {
-            inChoiceRoom = true;
-            spawnChoiceRelics(room);
-            // open door immediately after choice (but we lock until player picks one)
-            closeDoorAt(room.template.exitXpx, 120f);
-        } else {
-            // spawn enemies
-            int si = 0;
-            for (int i = 0; i < room.meleeCount; i++) {
-                Vector2 sp = room.spawnOrder.get(si++ % room.spawnOrder.size);
-                meleeEnemies.add(new MeleeEnemy(physics.world, sp.x, sp.y));
-                CharacterAnimator a = new CharacterAnimator();
-                DebugAnimLibrary.defineMeleeEnemy(a);
-                meleeAnims.add(a);
-            }
-            for (int i = 0; i < room.rangedCount; i++) {
-                Vector2 sp = room.spawnOrder.get(si++ % room.spawnOrder.size);
-                rangedEnemies.add(new RangedEnemy(physics.world, sp.x, sp.y));
-                CharacterAnimator a = new CharacterAnimator();
-                DebugAnimLibrary.defineMeleeEnemy(a);
-                rangedAnims.add(a);
-            }
-
-            closeDoorAt(room.template.exitXpx, 120f);
-        }
-
-        encounter.reset();
-        hitstopTimer = 0f;
-        shootCooldown = 0f;
-        clearTextTimer = 0f;
-        meleeHitCounter = 0;
-
-        // fade in
-        fade = 1f;
-        transitioning = true;
-        transitionTimer = 0f;
-        transitionToNextRoom = false;
-    }
-
-    private void spawnChoiceRelics(RoomInstance room) {
-        // elige 2 distintas
-        Random rr = new Random(room.seed ^ 0x1234ABCD);
-        RelicType a = dropRules.rollRelic(rr);
-        RelicType b = dropRules.rollRelic(rr);
-        if (a == b) b = (a == RelicType.BONUS_PROJECTILE_DAMAGE) ? RelicType.FIRE_RATE_UP : RelicType.BONUS_PROJECTILE_DAMAGE;
-
-        // 2 pickups
-        pickups.add(new RelicPickup(physics.world, a, 520f, 220f));
-        pickups.add(new RelicPickup(physics.world, b, 820f, 220f));
-    }
-
-    private void closeDoorAt(float xPx, float yPx) {
-        if (doorBody != null) return;
-
-        BodyDef bd = new BodyDef();
-        bd.type = BodyDef.BodyType.StaticBody;
-        bd.position.set(PhysicsConstants.toMeters(xPx), PhysicsConstants.toMeters(yPx));
-        doorBody = physics.world.createBody(bd);
-
-        PolygonShape s = new PolygonShape();
-        s.setAsBox(PhysicsConstants.toMeters(DOOR_W / 2f), PhysicsConstants.toMeters(DOOR_H / 2f));
-
-        FixtureDef fd = new FixtureDef();
-        fd.shape = s;
-        Fixture fx = doorBody.createFixture(fd);
-        fx.setUserData("ground");
-        s.dispose();
-
-        doorClosed = true;
-    }
-
-    private void openDoor() {
-        if (doorBody == null) return;
-        combat.purgeForBody(doorBody);
-        physics.world.destroyBody(doorBody);
-        doorBody = null;
-        doorClosed = false;
+        // door for current room
+        spawnDoorForCurrentRoom();
     }
 
     @Override
     public void render(float delta) {
         inputProvider.poll(input);
 
+        // toggles
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1) || Gdx.input.isKeyJustPressed(Input.Keys.TAB)) debugOverlay = !debugOverlay;
         if (Gdx.input.isKeyJustPressed(Input.Keys.H)) debugHitboxes = !debugHitboxes;
         if (Gdx.input.isKeyJustPressed(Input.Keys.U)) debugHurtboxes = !debugHurtboxes;
 
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) startNewRun(false);
-
+        // restart run (FULL reset: rebuild physics/world/player to avoid ghost colliders & dead state)
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            restartRequested = true;  // ✅ solo pedir restart
+        }
         float dt = delta;
         if (hitstopTimer > 0f) {
             hitstopTimer = Math.max(0f, hitstopTimer - delta);
@@ -306,253 +143,268 @@ public class GameplayScreen implements Screen {
     }
 
     private void update(float delta) {
-        if (shootCooldown > 0f) shootCooldown = Math.max(0f, shootCooldown - delta);
 
-        // transition fade
-        if (transitioning) {
-            transitionTimer += delta;
-            float t = Math.min(1f, transitionTimer / 0.25f);
+        if (restartRequested) {
+            restartRequested = false;
 
-            if (!transitionToNextRoom) {
-                fade = 1f - t;
-                if (t >= 1f) transitioning = false;
+            // Limpia efectos/counters de gameplay
+            shake.reset();
+            hitstopTimer = 0f;
+            meleeHitCounter = 0;
+
+            // IMPORTANT: destruye puerta vieja de forma segura
+            resetDoor();
+
+            // Reinicia el run reconstruyendo física
+            run.startNewRun(true);
+
+            // Reinicia transición / puerta
+            transition.startFadeIn();
+            spawnDoorForCurrentRoom();
+
+            return; // ✅ cortamos el frame aquí (no step, no flush, nada)
+        }
+
+        // Transition update
+        boolean finishedFadeOut = transition.update(delta);
+        if (finishedFadeOut) {
+            // advance room (or new run) and fade in
+            resetDoor();
+
+            if (run.run.hasNext()) {
+                run.run.next();
+                run.loadCurrentRoom(false);
             } else {
-                fade = t;
-                if (t >= 1f) {
-                    if (run.hasNext()) {
-                        run.next();
-                        loadCurrentRoom(false);
-                    } else {
-                        startNewRun(false);
-                    }
-                    return;
-                }
+                run.startNewRun(false);
             }
+
+            transition.startFadeIn();
+            spawnDoorForCurrentRoom();
+            return;
         }
 
-        if (shakeTimer > 0f) {
-            shakeTimer = Math.max(0f, shakeTimer - delta);
-            shakeSeed += 31.7f * delta;
-        }
+        // shake timers
+        shake.update(delta);
 
-        if (clearTextTimer > 0f) clearTextTimer = Math.max(0f, clearTextTimer - delta);
+        // shoot cooldown
+        if (run.shootCooldown > 0f) run.shootCooldown = Math.max(0f, run.shootCooldown - delta);
 
-        combat.beginFrame();
+        // Begin frame combat
+        run.combat.beginFrame();
 
-        // If dead: stop sliding
-        if (!player.isAlive()) {
-            Vector2 v = player.body.getLinearVelocity();
-            player.body.setLinearVelocity(0f, v.y);
+        // Player update (block when dead)
+        if (!run.player.isAlive()) {
+            var v = run.player.body.getLinearVelocity();
+            run.player.body.setLinearVelocity(0f, v.y);
         } else {
-            // Optional (if your Player supports it): apply dash cooldown relic
-            // player.setDashCooldownMultiplier(relics.getDashCooldownMultiplier());
+            run.player.update(delta, input);
 
-            player.update(delta, input);
-
-            if (player.shouldSpawnAttackHitboxThisFrame()) {
-                combat.spawnMeleeHitbox(player.body, player, player.getFaction(), player.getFacingDir(), player.getAimY(input), 1);
+            // melee
+            if (run.player.shouldSpawnAttackHitboxThisFrame()) {
+                run.combat.spawnMeleeHitbox(run.player.body, run.player, run.player.getFaction(), run.player.getFacingDir(), run.player.getAimY(input), PlayerTuning.BASE_MELEE_DAMAGE);
             }
 
-            // Shoot with cooldown + fire rate relic + piercing
-            if (input.isJustPressed(Action.SHOOT) && shootCooldown <= 0f) {
-                int dmg = 1 + relics.getBonusProjectileDamage();
-                float sx = player.getXpx() + player.getFacingDir() * 14f;
-                float sy = player.getYpx() + 10f;
+            // shoot (K)
+            if (input.isJustPressed(Action.SHOOT) && run.shootCooldown <= 0f) {
+                int dmg = PlayerTuning.BASE_PROJECTILE_DAMAGE + run.relics.getBonusProjectileDamage();
 
-                Projectile p = new Projectile(physics.world, player.getFaction(), dmg, sx, sy, player.getFacingDir() * 8.5f, 0f, 1.2f);
-                p.piercesLeft = relics.getPiercingShots();
-                projectiles.spawn(p);
+                float sx = run.player.getXpx() + run.player.getFacingDir() * PlayerTuning.PROJECTILE_SPAWN_OFFSET_X;
+                float sy = run.player.getYpx() + PlayerTuning.PROJECTILE_SPAWN_OFFSET_Y;
 
-                shootCooldown = SHOOT_BASE_COOLDOWN * relics.getFireRateMultiplier();
+                Projectile p = new Projectile(run.physics.world, run.player.getFaction(), dmg, sx, sy,
+                    run.player.getFacingDir() * PlayerTuning.PROJECTILE_SPEED, 0f, PlayerTuning.PROJECTILE_LIFETIME);
+
+                p.piercesLeft = run.relics.getPiercingShots();
+                run.projectiles.spawn(p);
+
+                run.shootCooldown = PlayerTuning.SHOOT_BASE_COOLDOWN * run.relics.getFireRateMultiplier();
             }
         }
 
-        // enemies skipped in choice room
-        if (!inChoiceRoom) {
-            for (int i = meleeEnemies.size - 1; i >= 0; i--) {
-                MeleeEnemy e = meleeEnemies.get(i);
-                e.update(delta, player);
+        // Enemies (skip in choice room)
+        if (!run.inChoiceRoom) {
+            for (int i = run.meleeEnemies.size - 1; i >= 0; i--) {
+                MeleeEnemy e = run.meleeEnemies.get(i);
+                e.update(delta, run.player);
 
-                meleeAnims.get(i).set(VisualMapper.enemyKey(e));
-                meleeAnims.get(i).update(delta);
+                run.meleeAnims.get(i).set(VisualMapper.enemyKey(e));
+                run.meleeAnims.get(i).update(delta);
 
                 if (e.didStartAttackThisFrame()) {
-                    combat.spawnMeleeHitbox(e.body, e, e.getFaction(), e.getFacingDir(), 0, 1);
+                    run.combat.spawnMeleeHitbox(e.body, e, e.getFaction(), e.getFacingDir(), 0, 1);
                 }
 
                 if (!e.isAlive()) {
-                    combat.purgeForBody(e.body);
-                    physics.world.destroyBody(e.body);
-                    meleeEnemies.removeIndex(i);
-                    meleeAnims.removeIndex(i);
-
-                    RoomInstance room = run.current();
-                    if (!relicDroppedThisRoom && rng.nextFloat() < room.relicDropChance) {
-                        RelicType t = dropRules.rollRelic(new Random(room.seed ^ (long) i * 1315423911L));
-                        pickups.add(new RelicPickup(physics.world, t, e.getXpx(), e.getYpx()));
-                        relicDroppedThisRoom = true;
-                    }
+                    run.combat.purgeForBody(e.body);
+                    run.physics.world.destroyBody(e.body);
+                    run.meleeEnemies.removeIndex(i);
+                    run.meleeAnims.removeIndex(i);
+                    run.onEnemyKilledDrop(e, i);
                 }
             }
 
-            for (int i = rangedEnemies.size - 1; i >= 0; i--) {
-                RangedEnemy re = rangedEnemies.get(i);
-                re.update(delta, player);
+            for (int i = run.rangedEnemies.size - 1; i >= 0; i--) {
+                RangedEnemy re = run.rangedEnemies.get(i);
+                re.update(delta, run.player);
 
-                rangedAnims.get(i).set(AnimKey.ENEMY_CHASE);
-                rangedAnims.get(i).update(delta);
+                run.rangedAnims.get(i).set(AnimKey.ENEMY_CHASE);
+                run.rangedAnims.get(i).update(delta);
 
                 if (re.didShootThisFrame()) {
                     float sx = re.getXpx() + re.getFacingDir() * 14f;
                     float sy = re.getYpx() + 10f;
-                    Projectile p = new Projectile(physics.world, re.getFaction(), 1, sx, sy, re.getFacingDir() * 7.5f, 0f, 1.4f);
-                    projectiles.spawn(p);
+                    Projectile p = new Projectile(run.physics.world, re.getFaction(), 1, sx, sy,
+                        re.getFacingDir() * 7.5f, 0f, 1.4f);
+                    run.projectiles.spawn(p);
                 }
 
                 if (!re.isAlive()) {
-                    physics.world.destroyBody(re.body);
-                    rangedEnemies.removeIndex(i);
-                    rangedAnims.removeIndex(i);
+                    run.physics.world.destroyBody(re.body);
+                    run.rangedEnemies.removeIndex(i);
+                    run.rangedAnims.removeIndex(i);
                 }
             }
         }
 
-        combat.update(delta);
+        // hitboxes lifetime
+        run.combat.update(delta);
 
-        physics.step(delta);
+        // physics
+        run.physics.step(delta);
 
-        projectiles.flushImpacts();
+        // projectile impacts after step
+        run.projectiles.flushImpacts();
 
-        // Shake per event
-        if (combat.consumePlayerHurt()) startShake(0.10f, 4.5f);
+        // events -> shake/hitstop
+        if (run.combat.consumePlayerHurt()) shake.start(ShakeTuning.PLAYER_HURT_DUR, ShakeTuning.PLAYER_HURT_INT);
+        if (run.combat.consumeEnemyHurt()) {
+            shake.start(ShakeTuning.ENEMY_HURT_DUR, ShakeTuning.ENEMY_HURT_INT);
 
-        // Lifesteal (counts enemy-hurt events as melee hits approximation)
-        if (combat.consumeEnemyHurt()) {
-            startShake(0.08f, 2.5f);
-
-            int N = relics.getLifestealEveryHits();
-            if (N > 0 && player.isAlive()) {
+            int N = run.relics.getLifestealEveryHits();
+            if (N > 0 && run.player.isAlive()) {
                 meleeHitCounter++;
-                if (meleeHitCounter % N == 0) {
-                    player.getHealth().heal(1);
-                }
+                if (meleeHitCounter % N == 0) run.player.getHealth().heal(1);
             }
         }
+        if (run.combat.consumeMeleeWorldHit()) shake.start(ShakeTuning.MELEE_WORLD_DUR, ShakeTuning.MELEE_WORLD_INT);
 
-        if (combat.consumeMeleeWorldHit()) startShake(0.08f, 2.5f);
-
-        int pe = projectiles.consumeImpactsEnemy();
+        int pe = run.projectiles.consumeImpactsEnemy();
         if (pe > 0) {
-            startShake(0.06f, 1.8f);
-            hitstopTimer = Math.max(hitstopTimer, 0.02f);
-        }
-        int pw = projectiles.consumeImpactsWorld();
-        if (pw > 0) {
-            startShake(0.05f, 0.9f);
+            shake.start(ShakeTuning.PROJ_HIT_ENEMY_DUR, ShakeTuning.PROJ_HIT_ENEMY_INT);
+            hitstopTimer = Math.max(hitstopTimer, CombatTuning.HITSTOP_PROJECTILE);
         }
 
-        projectiles.update(delta);
+        int pw = run.projectiles.consumeImpactsWorld();
+        if (pw > 0) shake.start(ShakeTuning.PROJ_HIT_WORLD_DUR, ShakeTuning.PROJ_HIT_WORLD_INT);
 
-        // pickup collection
-        for (int i = pickups.size - 1; i >= 0; i--) {
-            RelicPickup p = pickups.get(i);
-            if (p.collected) {
-                // if choice room: picking one removes the other
-                if (inChoiceRoom) {
-                    // remove all pickups bodies safely
-                    for (int k = pickups.size - 1; k >= 0; k--) {
-                        RelicPickup other = pickups.get(k);
-                        if (other.body.getWorld() != null) physics.world.destroyBody(other.body);
-                        pickups.removeIndex(k);
-                    }
-                    inChoiceRoom = false;
-                    openDoor();
-                    clearTextTimer = 0f;
-                } else {
-                    relics.add(p.type);
-                    physics.world.destroyBody(p.body);
-                    pickups.removeIndex(i);
-                }
+        run.projectiles.update(delta);
+
+        // pickups
+        run.processPickupsChoiceAware();
+
+        // encounter
+        int alive = run.meleeEnemies.size + run.rangedEnemies.size;
+        run.encounter.update(delta, alive);
+
+        // door: open when canExit
+        if (run.canExit()) openDoor();
+
+        // exit trigger: start fade-out
+        RoomInstance room = run.run.current();
+        if (!transition.isTransitioning() && run.canExit()) {
+            if (run.player.getXpx() > room.template.exitXpx + 20f) {
+                transition.startFadeOut();
             }
         }
 
-        if (combat.hitThisFrame()) {
-            hitstopTimer = Math.max(hitstopTimer, 0.05f);
-            startShake(0.10f, 4.0f);
-        }
-
-        int alive = meleeEnemies.size + rangedEnemies.size;
-        encounter.update(delta, alive);
-
-        // Choice room opens door when picked, otherwise locked
-        if (run.current().type == RoomType.CHOICE) {
-            // keep locked until picked
-        } else if (encounter.getState() == EncounterManager.State.CLEAR) {
-            openDoor();
-            clearTextTimer = Math.max(clearTextTimer, 1.2f);
-        }
-
-        RoomInstance r = run.current();
-        if (r != null && !transitioning) {
-            boolean canExit = (r.type == RoomType.CHOICE) ? !inChoiceRoom : (encounter.getState() == EncounterManager.State.CLEAR);
-            if (canExit && player.getXpx() > r.template.exitXpx + 20f) {
-                transitioning = true;
-                transitionToNextRoom = true;
-                transitionTimer = 0f;
-            }
-        }
-
-        // camera
-        float targetX = player.getXpx();
-        float targetY = player.getYpx() + 40f;
-
-        worldCamera.position.x += (targetX - worldCamera.position.x) * 0.12f;
-        worldCamera.position.y += (targetY - worldCamera.position.y) * 0.10f;
-
-        applyShakeToCamera();
+        // camera follow
+        cameraController.follow(worldCamera, run.player);
+        shake.apply(worldCamera);
         worldCamera.update();
 
         // anim player
-        playerAnim.set(VisualMapper.playerKey(player));
+        playerAnim.set(VisualMapper.playerKey(run.player));
         playerAnim.update(delta);
     }
 
-    private void startShake(float duration, float intensity) {
-        shakeTimer = Math.max(shakeTimer, duration);
-        shakeIntensity = Math.max(shakeIntensity, intensity);
+    private void spawnDoorForCurrentRoom() {
+        // door starts closed
+        closeDoorAt(run.run.current().template.exitXpx, 120f);
     }
 
-    private void applyShakeToCamera() {
-        if (shakeTimer <= 0f) return;
-        float sx = (float)Math.sin(shakeSeed * 17.0) * shakeIntensity;
-        float sy = (float)Math.cos(shakeSeed * 23.0) * shakeIntensity;
-        worldCamera.position.x += sx;
-        worldCamera.position.y += sy;
+    private void closeDoorAt(float xPx, float yPx) {
+        if (doorBody != null) return;
+
+        BodyDef bd = new BodyDef();
+        bd.type = BodyDef.BodyType.StaticBody;
+        bd.position.set(PhysicsConstants.toMeters(xPx), PhysicsConstants.toMeters(yPx));
+        doorBody = run.physics.world.createBody(bd);
+
+        PolygonShape s = new PolygonShape();
+        s.setAsBox(PhysicsConstants.toMeters(28f / 2f), PhysicsConstants.toMeters(220f / 2f));
+
+        FixtureDef fd = new FixtureDef();
+        fd.shape = s;
+        Fixture fx = doorBody.createFixture(fd);
+        fx.setUserData("ground");
+        s.dispose();
+
+        doorClosed = true;
+    }
+
+    private void openDoor() {
+        if (doorBody == null) return;
+        run.combat.purgeForBody(doorBody);
+        run.physics.world.destroyBody(doorBody);
+        doorBody = null;
+        doorClosed = false;
+    }
+
+    private void resetDoor() {
+        if (doorBody != null) {
+            try {
+                // destroy only if it still belongs to the current world
+                if (run.physics != null && doorBody.getWorld() == run.physics.world) {
+                    run.combat.purgeForBody(doorBody);
+                    run.physics.world.destroyBody(doorBody);
+                }
+            } catch (Exception ignored) {
+            } finally {
+                doorBody = null;
+                doorClosed = false;
+            }
+        } else {
+            doorClosed = false;
+        }
     }
 
     private void renderWorld() {
         shapes.setProjectionMatrix(worldCamera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        if (platformRects != null) {
-            for (LevelFactory.PlatformRect p : platformRects) {
+        // platforms
+        if (run.platformRects != null) {
+            for (var p : run.platformRects) {
                 if ("oneway".equals(p.type)) shapes.setColor(0.35f, 0.35f, 0.38f, 1f);
                 else shapes.setColor(0.20f, 0.20f, 0.22f, 1f);
                 shapes.rect(p.cx - p.w/2f, p.cy - p.h/2f, p.w, p.h);
             }
         }
 
+        // door
         if (doorClosed && doorBody != null) {
             float dx = PhysicsConstants.toPixels(doorBody.getPosition().x);
             float dy = PhysicsConstants.toPixels(doorBody.getPosition().y);
             shapes.setColor(0.08f, 0.08f, 0.09f, 1f);
-            shapes.rect(dx - DOOR_W/2f, dy - DOOR_H/2f, DOOR_W, DOOR_H);
+            shapes.rect(dx - 14f, dy - 110f, 28f, 220f);
         }
 
+        // pickups
         shapes.setColor(0.10f, 0.45f, 0.10f, 1f);
-        for (RelicPickup p : pickups) shapes.circle(p.getXpx(), p.getYpx(), 6f, 16);
+        for (RelicPickup p : run.pickups) shapes.circle(p.getXpx(), p.getYpx(), 6f, 16);
 
-        for (Projectile pr : projectiles.projectiles) {
+        // projectiles
+        for (var pr : run.projectiles.projectiles) {
             if (pr.state == Projectile.State.ALIVE) {
                 if (pr.faction == Faction.PLAYER) shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
                 else shapes.setColor(0.10f, 0.10f, 0.25f, 1f);
@@ -566,45 +418,27 @@ public class GameplayScreen implements Screen {
             }
         }
 
-        for (int i = 0; i < meleeEnemies.size; i++) {
-            MeleeEnemy e = meleeEnemies.get(i);
+        // enemies
+        for (int i = 0; i < run.meleeEnemies.size; i++) {
+            MeleeEnemy e = run.meleeEnemies.get(i);
             float ex = e.getXpx();
             float ey = e.getYpx() - 14f;
-
-            if (e.isFlashing()) shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
-            else if (e.getState() == MeleeEnemy.State.TELEGRAPH) {
-                float al = e.getTelegraphAlpha();
-                float base = 0.14f;
-                float glow = 0.40f * al;
-                float c = base + glow;
-                shapes.setColor(c, c, c, 1f);
-            } else shapes.setColor(0.12f, 0.12f, 0.16f, 1f);
-
-            charRenderer.draw(shapes, ex, ey, e.getFacingDir(), meleeAnims.get(i).getFrame());
+            shapes.setColor(0.12f, 0.12f, 0.16f, 1f);
+            charRenderer.draw(shapes, ex, ey, e.getFacingDir(), run.meleeAnims.get(i).getFrame());
         }
-
-        for (int i = 0; i < rangedEnemies.size; i++) {
-            RangedEnemy e = rangedEnemies.get(i);
+        for (int i = 0; i < run.rangedEnemies.size; i++) {
+            RangedEnemy e = run.rangedEnemies.get(i);
             float ex = e.getXpx();
             float ey = e.getYpx() - 14f;
-
-            if (e.isFlashing()) shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
-            else if (e.getState() == RangedEnemy.State.TELEGRAPH) {
-                float al = e.getTelegraphAlpha();
-                float base = 0.16f;
-                float glow = 0.35f * al;
-                float c = base + glow;
-                shapes.setColor(0.10f, c, 0.30f, 1f);
-            } else shapes.setColor(0.10f, 0.10f, 0.22f, 1f);
-
+            shapes.setColor(0.10f, 0.10f, 0.22f, 1f);
             shapes.rect(ex - 10f, ey, 20f, 28f);
         }
 
-        float px = player.getXpx();
-        float py = player.getYpx() - 16f;
-        if (player.isFlashing()) shapes.setColor(0.02f, 0.02f, 0.02f, 1f);
-        else shapes.setColor(0.10f, 0.10f, 0.12f, 1f);
-        charRenderer.draw(shapes, px, py, player.getFacingDir(), playerAnim.getFrame());
+        // player
+        float px = run.player.getXpx();
+        float py = run.player.getYpx() - 16f;
+        shapes.setColor(run.player.isFlashing() ? 0.02f : 0.10f, run.player.isFlashing() ? 0.02f : 0.10f, run.player.isFlashing() ? 0.02f : 0.12f, 1f);
+        charRenderer.draw(shapes, px, py, run.player.getFacingDir(), playerAnim.getFrame());
 
         shapes.end();
 
@@ -613,21 +447,21 @@ public class GameplayScreen implements Screen {
 
             if (debugHurtboxes) {
                 shapes.setColor(0.2f, 0.4f, 0.9f, 1f);
-                for (Fixture fx : player.body.getFixtureList()) {
+                for (Fixture fx : run.player.body.getFixtureList()) {
                     if ("player_ground_sensor".equals(fx.getUserData())) continue;
                     debugPhysics.drawFixtureOutline(shapes, fx);
                 }
-                for (MeleeEnemy e : meleeEnemies) {
+                for (MeleeEnemy e : run.meleeEnemies) {
                     for (Fixture fx : e.body.getFixtureList()) debugPhysics.drawFixtureOutline(shapes, fx);
                 }
-                for (RangedEnemy e : rangedEnemies) {
+                for (RangedEnemy e : run.rangedEnemies) {
                     for (Fixture fx : e.body.getFixtureList()) debugPhysics.drawFixtureOutline(shapes, fx);
                 }
             }
 
             if (debugHitboxes) {
                 shapes.setColor(0.9f, 0.2f, 0.2f, 1f);
-                for (Fixture fx : combat.getActiveHitboxFixtures()) debugPhysics.drawFixtureOutline(shapes, fx);
+                for (Fixture fx : run.combat.getActiveHitboxFixtures()) debugPhysics.drawFixtureOutline(shapes, fx);
             }
 
             shapes.end();
@@ -635,23 +469,25 @@ public class GameplayScreen implements Screen {
     }
 
     private void renderUI() {
+        // hp bar + fade overlay
         shapes.setProjectionMatrix(uiCamera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        float barX = 10f, barY = VIRTUAL_H - 26f, barW = 200f, barH = 10f;
-        int hp = player.getHealth().getHp();
-        int maxHp = player.getHealth().getMaxHp();
+        float barX = 10f, barY = GameConfig.VIRTUAL_H - 26f, barW = 200f, barH = 10f;
+        int hp = run.player.getHealth().getHp();
+        int maxHp = run.player.getHealth().getMaxHp();
         float pct = (maxHp <= 0) ? 0f : (hp / (float) maxHp);
         pct = Math.max(0f, Math.min(1f, pct));
 
         shapes.setColor(0.10f, 0.10f, 0.12f, 1f);
         shapes.rect(barX, barY, barW, barH);
+
         shapes.setColor(0.20f, 0.75f, 0.25f, 1f);
         shapes.rect(barX, barY, barW * pct, barH);
 
-        if (fade > 0f) {
-            shapes.setColor(0f, 0f, 0f, fade);
-            shapes.rect(0, 0, VIRTUAL_W, VIRTUAL_H);
+        if (transition.fade > 0f) {
+            shapes.setColor(0f, 0f, 0f, transition.fade);
+            shapes.rect(0, 0, GameConfig.VIRTUAL_W, GameConfig.VIRTUAL_H);
         }
 
         shapes.end();
@@ -659,29 +495,22 @@ public class GameplayScreen implements Screen {
         batch.setProjectionMatrix(uiCamera.combined);
         batch.begin();
 
-        RoomInstance room = run.current();
+        RoomInstance room = run.run.current();
 
-        font.draw(batch, "Seed: " + run.seed, 10, VIRTUAL_H - 10);
-        font.draw(batch, "Room: " + (run.index + 1) + "/" + run.totalRooms + " [" + room.type + "]  tpl=" + room.template.id, 10, VIRTUAL_H - 42);
-        font.draw(batch, "Budget: " + room.budget + "  M:" + room.meleeCount + " R:" + room.rangedCount, 10, VIRTUAL_H - 58);
+        hudRenderer.drawHeader(batch, font, run.run, room);
+        hudRenderer.drawRelics(batch, font, run.relics);
 
-        font.draw(batch, "Relics: " + relics.getOwned().size, 10, VIRTUAL_H - 76);
-        font.draw(batch, "+ProjDmg: +" + relics.getBonusProjectileDamage(), 120, VIRTUAL_H - 76);
-        font.draw(batch, "FireRate x" + String.format("%.2f", (1f / relics.getFireRateMultiplier())), 260, VIRTUAL_H - 76);
-        font.draw(batch, "Pierce: " + relics.getPiercingShots(), 430, VIRTUAL_H - 76);
-        font.draw(batch, "Lifesteal: " + relics.getLifestealEveryHits(), 510, VIRTUAL_H - 76);
+        font.draw(batch, "HP: " + hp + "/" + maxHp, 10, GameConfig.VIRTUAL_H - 92);
+        font.draw(batch, "Enemies: " + (run.meleeEnemies.size + run.rangedEnemies.size), 260, GameConfig.VIRTUAL_H - 92);
 
         font.draw(batch, "K shoot | J melee | R new run | F1/TAB overlay | H/U debug", 10, 20);
 
-        if (room.type == RoomType.CHOICE && inChoiceRoom) {
-            hud.drawFadingText(batch, font, "CHOOSE ONE RELIC", 250, 220, 1f);
-        } else if (clearTextTimer > 0f) {
-            float a = Math.min(1f, clearTextTimer / 0.30f);
-            hud.drawFadingText(batch, font, "CLEAR! -> go right", 250, 200, a);
+        if (room.type == RoomType.CHOICE && run.inChoiceRoom) {
+            hudPainter.drawFadingText(batch, font, "CHOOSE ONE RELIC", 250, 220, 1f);
         }
 
-        if (!player.isAlive()) {
-            hud.drawFadingText(batch, font, "YOU DIED - Press R", 240, 200, 1f);
+        if (!run.player.isAlive()) {
+            hudPainter.drawFadingText(batch, font, "YOU DIED - Press R", 240, 200, 1f);
         }
 
         batch.end();
@@ -697,6 +526,6 @@ public class GameplayScreen implements Screen {
         shapes.dispose();
         batch.dispose();
         font.dispose();
-        if (physics != null) physics.dispose();
+        if (run.physics != null) run.physics.dispose();
     }
 }
