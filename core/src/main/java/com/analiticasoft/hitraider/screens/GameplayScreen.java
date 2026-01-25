@@ -5,16 +5,19 @@ import com.analiticasoft.hitraider.combat.Faction;
 import com.analiticasoft.hitraider.combat.Projectile;
 import com.analiticasoft.hitraider.config.*;
 import com.analiticasoft.hitraider.controllers.*;
+import com.analiticasoft.hitraider.diagnostics.FrameStats;
 import com.analiticasoft.hitraider.entities.MeleeEnemy;
 import com.analiticasoft.hitraider.entities.RangedEnemy;
 import com.analiticasoft.hitraider.input.Action;
 import com.analiticasoft.hitraider.input.DesktopInputProvider;
 import com.analiticasoft.hitraider.input.InputState;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
+import com.analiticasoft.hitraider.physics.PhysicsDestroyQueue;
 import com.analiticasoft.hitraider.relics.RelicPickup;
 import com.analiticasoft.hitraider.render.*;
 import com.analiticasoft.hitraider.ui.HudPainter;
 import com.analiticasoft.hitraider.world.RoomInstance;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
@@ -33,16 +36,18 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
 /**
- * GameplayScreen (refactor + sprite pipeline integrated)
- * - Safe assets (no crash if missing)
- * - Player/enemy sprites + fallback to debug shapes
- * - 2-layer parallax background (if textures exist)
- * - HUD: Souls-like bars + floating weapon/info, toggles F1/F2
- * - Debug toggles: H hitboxes, U hurtboxes
- * - Restart is deferred (R) to avoid Box2D native crashes
- * - Hot reload assets (F5)
+ * GameplayScreen FINAL (Phase A)
+ * - Fixed pipeline (tickFrame)
+ * - DestroyQueue everywhere (no destroyBody in gameplay)
+ * - Deferred restart/reload
+ * - FrameStats + Strict mode freeze
+ * - Sprite pipeline + parallax + fallbacks
  */
 public class GameplayScreen implements Screen {
+
+    // --- constants (keep here until you decide to move to UiTuning) ---
+    private static final float PARALLAX_BASE = 1.00f;
+    private static final float PARALLAX_MID  = 0.85f;
 
     // Cameras
     private OrthographicCamera worldCamera;
@@ -64,17 +69,29 @@ public class GameplayScreen implements Screen {
     private boolean debugHitboxes = true;
     private boolean debugHurtboxes = true;
 
+    // Strict debug
+    private boolean strictModeOn = false;
+    private boolean strictFreezeOnFail = true;
+    private boolean frozenByStrict = false;
+    private String lastStrictError = null;
+
     // Input
     private final InputState input = new InputState();
     private final DesktopInputProvider inputProvider = new DesktopInputProvider();
 
-    // Controllers / game state
+    // Systems
     private final RunController run = new RunController();
     private final CameraController cameraController = new CameraController();
     private final ShakeController shake = new ShakeController();
     private final TransitionController transition = new TransitionController();
 
-    // Debug visuals fallback
+    // Fortification: unified destroy queue
+    private final PhysicsDestroyQueue destroyQueue = new PhysicsDestroyQueue();
+
+    // Perf stats
+    private final FrameStats frameStats = new FrameStats();
+
+    // Visual fallback
     private final CharacterRenderer charRenderer = new DebugCharacterRenderer();
     private final DebugPhysicsRenderer debugPhysics = new DebugPhysicsRenderer();
     private CharacterAnimator playerAnim;
@@ -87,8 +104,9 @@ public class GameplayScreen implements Screen {
     private float hitstopTimer = 0f;
     private int meleeHitCounter = 0;
 
-    // Restart deferred
+    // Deferred flags
     private boolean restartRequested = false;
+    private boolean reloadRequested = false;
 
     // Sprite system + background
     private final SpriteManager sprites = new SpriteManager();
@@ -116,46 +134,39 @@ public class GameplayScreen implements Screen {
         batch = new SpriteBatch();
         font = new BitmapFont();
 
-        // Debug anim fallback (player only)
         playerAnim = new CharacterAnimator();
         DebugAnimLibrary.definePlayer(playerAnim);
 
-        // Load sprites safely (will not crash if missing)
         sprites.load();
+        rebuildBackground();
 
-        // Default background (forest) if assets exist
-        background = new BackgroundParallax(
-            sprites.forestBase(),
-            sprites.forestMid(),
-            1.0f,
-            0.85f,
-            GameConfig.VIRTUAL_H
-        );
-
-        // Start run
         run.buildTemplates();
+        run.setDestroyQueue(destroyQueue);
         run.startNewRun(true);
+
+        // ensure projectile system linked
+        run.projectiles.setDestroyQueue(destroyQueue);
 
         transition.startFadeIn();
 
-        // Camera start
         worldCamera.position.set(GameConfig.VIRTUAL_W / 2f, GameConfig.VIRTUAL_H / 2f, 0f);
         worldCamera.update();
 
-        // Door for current room
         spawnDoorForCurrentRoom();
-
-        // Init enemy timers
         syncEnemyAnimTimers();
 
-        // Init player visual state
         playerVisualState = PlayerStateMapper.map(run.player);
         playerStateTime = 0f;
+
+        // stats tuning
+        frameStats.setSpikeThresholdMs(33f);
+        frameStats.setWindowSeconds(5f);
     }
 
     @Override
     public void render(float delta) {
         inputProvider.poll(input);
+        frameStats.update(delta);
 
         // HUD toggles
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1) || Gdx.input.isKeyJustPressed(Input.Keys.TAB)) hudEssentialOn = !hudEssentialOn;
@@ -165,30 +176,30 @@ public class GameplayScreen implements Screen {
         if (Gdx.input.isKeyJustPressed(Input.Keys.H)) debugHitboxes = !debugHitboxes;
         if (Gdx.input.isKeyJustPressed(Input.Keys.U)) debugHurtboxes = !debugHurtboxes;
 
-        // Hot reload assets (optional)
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F5)) {
-            sprites.reload();
-            background = new BackgroundParallax(
-                sprites.forestBase(),
-                sprites.forestMid(),
-                1.0f,
-                0.85f,
-                GameConfig.VIRTUAL_H
-            );
+        // Strict mode toggles
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F7)) strictModeOn = !strictModeOn;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F8)) strictFreezeOnFail = !strictFreezeOnFail;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F9)) { frozenByStrict = false; lastStrictError = null; }
+
+        // Deferred asset reload
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F5)) reloadRequested = true;
+
+        // Snapshot manual
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F6)) {
+            Gdx.app.log("SNAPSHOT", buildSnapshotString("manual"));
         }
 
-        // Restart request (deferred)
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
-            restartRequested = true;
-        }
+        // Deferred restart
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) restartRequested = true;
 
         float dt = delta;
         if (hitstopTimer > 0f) {
             hitstopTimer = Math.max(0f, hitstopTimer - delta);
             dt = 0f;
         }
+        if (frozenByStrict) dt = 0f;
 
-        update(dt);
+        tickFrame(dt);
 
         Gdx.gl.glClearColor(0.92f, 0.93f, 0.95f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -202,8 +213,16 @@ public class GameplayScreen implements Screen {
         input.endFrame();
     }
 
-    private void update(float delta) {
-        // SAFE deferred restart
+    private void tickFrame(float delta) {
+        // 0) reload (safe)
+        if (reloadRequested) {
+            reloadRequested = false;
+            sprites.reload();
+            rebuildBackground();
+            return;
+        }
+
+        // 1) restart (safe)
         if (restartRequested) {
             restartRequested = false;
 
@@ -213,10 +232,12 @@ public class GameplayScreen implements Screen {
 
             resetDoor();
 
+            run.setDestroyQueue(destroyQueue);
             run.startNewRun(true);
+            run.projectiles.setDestroyQueue(destroyQueue);
+
             transition.startFadeIn();
             spawnDoorForCurrentRoom();
-
             syncEnemyAnimTimers();
 
             playerVisualState = PlayerStateMapper.map(run.player);
@@ -225,7 +246,7 @@ public class GameplayScreen implements Screen {
             return;
         }
 
-        // Transition update
+        // 2) transition
         boolean finishedFadeOut = transition.update(delta);
         if (finishedFadeOut) {
             resetDoor();
@@ -237,129 +258,158 @@ public class GameplayScreen implements Screen {
                 run.startNewRun(false);
             }
 
+            run.setDestroyQueue(destroyQueue);
+            run.projectiles.setDestroyQueue(destroyQueue);
+
             transition.startFadeIn();
             spawnDoorForCurrentRoom();
             syncEnemyAnimTimers();
 
             playerVisualState = PlayerStateMapper.map(run.player);
             playerStateTime = 0f;
-
             return;
         }
 
-        // Shake timers
+        // 3) pre-update
         shake.update(delta);
-
-        // Shoot cooldown
         if (run.shootCooldown > 0f) run.shootCooldown = Math.max(0f, run.shootCooldown - delta);
 
-        // Begin frame combat
+        // 4) begin frame
         run.combat.beginFrame();
 
-        // Player update (block when dead)
+        // 5) update
+        updatePlayer(delta);
+        updateEnemies(delta);
+
+        // 6) pre-physics
+        run.combat.update(delta);
+
+        // 7) step
+        run.physics.step(delta);
+
+        // 8) post-physics
+        run.projectiles.flushImpacts();
+        destroyQueue.flush(run.physics.world, run.combat);
+        run.projectiles.update(delta);
+        run.processPickupsChoiceAware();
+
+        // 9) events
+        postPhysicsEvents(delta);
+
+        // 10) camera
+        cameraController.follow(worldCamera, run.player);
+        shake.apply(worldCamera);
+        worldCamera.update();
+
+        // 11) visuals
+        updateVisualTimers(delta);
+
+        // 12) strict/invariants
+        if (hudInfoOn || strictModeOn) validateInvariants();
+    }
+
+    private void updatePlayer(float delta) {
         if (!run.player.isAlive()) {
             var v = run.player.body.getLinearVelocity();
             run.player.body.setLinearVelocity(0f, v.y);
-        } else {
-            run.player.update(delta, input);
+            return;
+        }
 
-            // melee
-            if (run.player.shouldSpawnAttackHitboxThisFrame()) {
-                run.combat.spawnMeleeHitbox(
-                    run.player.body,
-                    run.player,
-                    run.player.getFaction(),
-                    run.player.getFacingDir(),
-                    run.player.getAimY(input),
-                    PlayerTuning.BASE_MELEE_DAMAGE
-                );
+        run.player.update(delta, input);
+
+        if (run.player.shouldSpawnAttackHitboxThisFrame()) {
+            run.combat.spawnMeleeHitbox(
+                run.player.body,
+                run.player,
+                run.player.getFaction(),
+                run.player.getFacingDir(),
+                run.player.getAimY(input),
+                PlayerTuning.BASE_MELEE_DAMAGE
+            );
+        }
+
+        if (input.isJustPressed(Action.SHOOT) && run.shootCooldown <= 0f) {
+            int dmg = PlayerTuning.BASE_PROJECTILE_DAMAGE + run.relics.getBonusProjectileDamage();
+
+            float sx = run.player.getXpx() + run.player.getFacingDir() * PlayerTuning.PROJECTILE_SPAWN_OFFSET_X;
+            float sy = run.player.getYpx() + PlayerTuning.PROJECTILE_SPAWN_OFFSET_Y;
+
+            Projectile p = new Projectile(
+                run.physics.world,
+                run.player.getFaction(),
+                dmg,
+                sx, sy,
+                run.player.getFacingDir() * PlayerTuning.PROJECTILE_SPEED,
+                0f,
+                PlayerTuning.PROJECTILE_LIFETIME
+            );
+
+            p.piercesLeft = run.relics.getPiercingShots();
+            run.projectiles.spawn(p);
+
+            run.shootCooldown = PlayerTuning.SHOOT_BASE_COOLDOWN * run.relics.getFireRateMultiplier();
+        }
+    }
+
+    private void updateEnemies(float delta) {
+        if (run.inChoiceRoom) return;
+
+        // melee
+        for (int i = run.meleeEnemies.size - 1; i >= 0; i--) {
+            MeleeEnemy e = run.meleeEnemies.get(i);
+            e.update(delta, run.player);
+
+            run.meleeAnims.get(i).set(VisualMapper.enemyKey(e));
+            run.meleeAnims.get(i).update(delta);
+
+            if (e.didStartAttackThisFrame()) {
+                run.combat.spawnMeleeHitbox(e.body, e, e.getFaction(), e.getFacingDir(), 0, 1);
             }
 
-            // shoot
-            if (input.isJustPressed(Action.SHOOT) && run.shootCooldown <= 0f) {
-                int dmg = PlayerTuning.BASE_PROJECTILE_DAMAGE + run.relics.getBonusProjectileDamage();
+            if (!e.isAlive()) {
+                run.combat.purgeForBody(e.body);
+                destroyQueue.queueBody(e.body);
 
-                float sx = run.player.getXpx() + run.player.getFacingDir() * PlayerTuning.PROJECTILE_SPAWN_OFFSET_X;
-                float sy = run.player.getYpx() + PlayerTuning.PROJECTILE_SPAWN_OFFSET_Y;
+                run.meleeEnemies.removeIndex(i);
+                run.meleeAnims.removeIndex(i);
+                if (i < meleeAnimTimes.size) meleeAnimTimes.removeIndex(i);
+
+                run.onEnemyKilledDrop(e, i);
+            }
+        }
+
+        // ranged
+        for (int i = run.rangedEnemies.size - 1; i >= 0; i--) {
+            RangedEnemy re = run.rangedEnemies.get(i);
+            re.update(delta, run.player);
+
+            run.rangedAnims.get(i).set(AnimKey.ENEMY_CHASE);
+            run.rangedAnims.get(i).update(delta);
+
+            if (re.didShootThisFrame()) {
+                float sx = re.getXpx() + re.getFacingDir() * 14f;
+                float sy = re.getYpx() + 10f;
 
                 Projectile p = new Projectile(
-                    run.physics.world,
-                    run.player.getFaction(),
-                    dmg,
+                    run.physics.world, re.getFaction(), 1,
                     sx, sy,
-                    run.player.getFacingDir() * PlayerTuning.PROJECTILE_SPEED,
-                    0f,
-                    PlayerTuning.PROJECTILE_LIFETIME
+                    re.getFacingDir() * 7.5f, 0f,
+                    1.4f
                 );
-
-                p.piercesLeft = run.relics.getPiercingShots();
                 run.projectiles.spawn(p);
+            }
 
-                run.shootCooldown = PlayerTuning.SHOOT_BASE_COOLDOWN * run.relics.getFireRateMultiplier();
+            if (!re.isAlive()) {
+                destroyQueue.queueBody(re.body);
+
+                run.rangedEnemies.removeIndex(i);
+                run.rangedAnims.removeIndex(i);
+                if (i < rangedAnimTimes.size) rangedAnimTimes.removeIndex(i);
             }
         }
+    }
 
-        // Enemies (skip in choice room)
-        if (!run.inChoiceRoom) {
-            // melee
-            for (int i = run.meleeEnemies.size - 1; i >= 0; i--) {
-                MeleeEnemy e = run.meleeEnemies.get(i);
-                e.update(delta, run.player);
-
-                run.meleeAnims.get(i).set(VisualMapper.enemyKey(e));
-                run.meleeAnims.get(i).update(delta);
-
-                if (e.didStartAttackThisFrame()) {
-                    run.combat.spawnMeleeHitbox(e.body, e, e.getFaction(), e.getFacingDir(), 0, 1);
-                }
-
-                if (!e.isAlive()) {
-                    run.combat.purgeForBody(e.body);
-                    run.physics.world.destroyBody(e.body);
-                    run.meleeEnemies.removeIndex(i);
-                    run.meleeAnims.removeIndex(i);
-                    if (i < meleeAnimTimes.size) meleeAnimTimes.removeIndex(i);
-                    run.onEnemyKilledDrop(e, i);
-                }
-            }
-
-            // ranged
-            for (int i = run.rangedEnemies.size - 1; i >= 0; i--) {
-                RangedEnemy re = run.rangedEnemies.get(i);
-                re.update(delta, run.player);
-
-                run.rangedAnims.get(i).set(AnimKey.ENEMY_CHASE);
-                run.rangedAnims.get(i).update(delta);
-
-                if (re.didShootThisFrame()) {
-                    float sx = re.getXpx() + re.getFacingDir() * 14f;
-                    float sy = re.getYpx() + 10f;
-
-                    Projectile p = new Projectile(run.physics.world, re.getFaction(), 1, sx, sy,
-                        re.getFacingDir() * 7.5f, 0f, 1.4f);
-
-                    run.projectiles.spawn(p);
-                }
-
-                if (!re.isAlive()) {
-                    run.physics.world.destroyBody(re.body);
-                    run.rangedEnemies.removeIndex(i);
-                    run.rangedAnims.removeIndex(i);
-                    if (i < rangedAnimTimes.size) rangedAnimTimes.removeIndex(i);
-                }
-            }
-        }
-
-        // hitboxes lifetime
-        run.combat.update(delta);
-
-        // physics
-        run.physics.step(delta);
-
-        // projectile impacts after step
-        run.projectiles.flushImpacts();
-
-        // events -> shake/hitstop
+    private void postPhysicsEvents(float delta) {
         if (run.combat.consumePlayerHurt()) shake.start(ShakeTuning.PLAYER_HURT_DUR, ShakeTuning.PLAYER_HURT_INT);
 
         if (run.combat.consumeEnemyHurt()) {
@@ -383,32 +433,20 @@ public class GameplayScreen implements Screen {
         int pw = run.projectiles.consumeImpactsWorld();
         if (pw > 0) shake.start(ShakeTuning.PROJ_HIT_WORLD_DUR, ShakeTuning.PROJ_HIT_WORLD_INT);
 
-        run.projectiles.update(delta);
-
-        // pickups
-        run.processPickupsChoiceAware();
-
-        // encounter
         int alive = run.meleeEnemies.size + run.rangedEnemies.size;
         run.encounter.update(delta, alive);
 
-        // door: open when canExit
         if (run.canExit()) openDoor();
 
-        // exit trigger: start fade-out
         RoomInstance room = run.run.current();
         if (!transition.isTransitioning() && run.canExit()) {
             if (run.player.getXpx() > room.template.exitXpx + 20f) {
                 transition.startFadeOut();
             }
         }
+    }
 
-        // camera follow
-        cameraController.follow(worldCamera, run.player);
-        shake.apply(worldCamera);
-        worldCamera.update();
-
-        // update player visual state time
+    private void updateVisualTimers(float delta) {
         PlayerSprites.State newState = PlayerStateMapper.map(run.player);
         if (newState != playerVisualState) {
             playerVisualState = newState;
@@ -417,17 +455,14 @@ public class GameplayScreen implements Screen {
             playerStateTime += delta;
         }
 
-        // enemy anim times
         for (int i = 0; i < meleeAnimTimes.size; i++) meleeAnimTimes.set(i, meleeAnimTimes.get(i) + delta);
         for (int i = 0; i < rangedAnimTimes.size; i++) rangedAnimTimes.set(i, rangedAnimTimes.get(i) + delta);
 
-        // anim fallback
         playerAnim.set(VisualMapper.playerKey(run.player));
         playerAnim.update(delta);
     }
 
     private void renderWorld() {
-        // ---------- BACKGROUND (parallax) ----------
         if (background != null) {
             batch.setProjectionMatrix(worldCamera.combined);
             batch.begin();
@@ -435,7 +470,6 @@ public class GameplayScreen implements Screen {
             batch.end();
         }
 
-        // ---------- FILLED SHAPES (platforms, door, pickups, projectiles) ----------
         shapes.setProjectionMatrix(worldCamera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
@@ -459,31 +493,26 @@ public class GameplayScreen implements Screen {
 
         for (var pr : run.projectiles.projectiles) {
             if (pr.state == Projectile.State.ALIVE) {
-                if (pr.faction == Faction.PLAYER) shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
-                else shapes.setColor(0.10f, 0.10f, 0.25f, 1f);
+                shapes.setColor(pr.faction == Faction.PLAYER ? 0.05f : 0.10f, 0.05f, pr.faction == Faction.PLAYER ? 0.05f : 0.25f, 1f);
                 shapes.rect(pr.lastXpx - 3f, pr.lastYpx - 3f, 6f, 6f);
             } else {
                 float a = pr.impactFxLeft / 0.10f;
                 float rr = (pr.faction == Faction.PLAYER ? 8f : 6f) + (1f - a) * 10f;
-                if (pr.faction == Faction.PLAYER) shapes.setColor(0.05f, 0.05f, 0.05f, 1f);
-                else shapes.setColor(0.10f, 0.10f, 0.25f, 1f);
+                shapes.setColor(pr.faction == Faction.PLAYER ? 0.05f : 0.10f, 0.05f, pr.faction == Faction.PLAYER ? 0.05f : 0.25f, 1f);
                 shapes.circle(pr.lastXpx, pr.lastYpx, rr, 18);
             }
         }
 
         shapes.end();
 
-        // ---------- SPRITES (enemies + player) ----------
         batch.setProjectionMatrix(worldCamera.combined);
         batch.begin();
 
-        // Melee enemies
         EnemySprites meleeSprites = sprites.eldarMelee();
         for (int i = 0; i < run.meleeEnemies.size; i++) {
             MeleeEnemy e = run.meleeEnemies.get(i);
             EnemySprites.State st = EnemyStateMapper.map(String.valueOf(e.getState()));
             float t = (i < meleeAnimTimes.size) ? meleeAnimTimes.get(i) : 0f;
-
             TextureRegion frame = EnemySprites.isOneShot(st) ? meleeSprites.getOnce(st, t) : meleeSprites.get(st, t);
 
             if (frame != null) {
@@ -503,13 +532,11 @@ public class GameplayScreen implements Screen {
             }
         }
 
-        // Ranged enemies
         EnemySprites rangedSprites = sprites.eldarRanged();
         for (int i = 0; i < run.rangedEnemies.size; i++) {
             RangedEnemy e = run.rangedEnemies.get(i);
             EnemySprites.State st = EnemyStateMapper.map(String.valueOf(e.getState()));
             float t = (i < rangedAnimTimes.size) ? rangedAnimTimes.get(i) : 0f;
-
             TextureRegion frame = EnemySprites.isOneShot(st) ? rangedSprites.getOnce(st, t) : rangedSprites.get(st, t);
 
             if (frame != null) {
@@ -529,7 +556,6 @@ public class GameplayScreen implements Screen {
             }
         }
 
-        // Player
         PlayerSprites ps = sprites.player();
         TextureRegion pFrame = PlayerSprites.isOneShot(playerVisualState)
             ? ps.getOnce(playerVisualState, playerStateTime)
@@ -553,47 +579,13 @@ public class GameplayScreen implements Screen {
 
         batch.end();
 
-        // ---------- FALLBACK enemy shapes where sprites are missing ----------
-        shapes.setProjectionMatrix(worldCamera.combined);
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-
-        for (int i = 0; i < run.meleeEnemies.size; i++) {
-            MeleeEnemy e = run.meleeEnemies.get(i);
-            EnemySprites.State st = EnemyStateMapper.map(String.valueOf(e.getState()));
-            float t = (i < meleeAnimTimes.size) ? meleeAnimTimes.get(i) : 0f;
-            TextureRegion frame = EnemySprites.isOneShot(st) ? meleeSprites.getOnce(st, t) : meleeSprites.get(st, t);
-
-            if (frame == null) {
-                float ex = e.getXpx();
-                float ey = e.getYpx() - 14f;
-                shapes.setColor(0.12f, 0.12f, 0.16f, 1f);
-                charRenderer.draw(shapes, ex, ey, e.getFacingDir(), run.meleeAnims.get(i).getFrame());
-            }
-        }
-
-        for (int i = 0; i < run.rangedEnemies.size; i++) {
-            RangedEnemy e = run.rangedEnemies.get(i);
-            EnemySprites.State st = EnemyStateMapper.map(String.valueOf(e.getState()));
-            float t = (i < rangedAnimTimes.size) ? rangedAnimTimes.get(i) : 0f;
-            TextureRegion frame = EnemySprites.isOneShot(st) ? rangedSprites.getOnce(st, t) : rangedSprites.get(st, t);
-
-            if (frame == null) {
-                float ex = e.getXpx();
-                float ey = e.getYpx() - 14f;
-                shapes.setColor(0.10f, 0.10f, 0.22f, 1f);
-                shapes.rect(ex - 10f, ey, 20f, 28f);
-            }
-        }
-
-        shapes.end();
-
-        // ---------- DEBUG LINES ----------
         if (debugHitboxes || debugHurtboxes) {
             shapes.setProjectionMatrix(worldCamera.combined);
             shapes.begin(ShapeRenderer.ShapeType.Line);
 
             if (debugHurtboxes) {
                 shapes.setColor(0.2f, 0.4f, 0.9f, 1f);
+
                 for (Fixture fx : run.player.body.getFixtureList()) {
                     if ("player_ground_sensor".equals(fx.getUserData())) continue;
                     debugPhysics.drawFixtureOutline(shapes, fx);
@@ -619,7 +611,6 @@ public class GameplayScreen implements Screen {
         shapes.setProjectionMatrix(uiCamera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Souls-like bars + legion circle
         if (hudEssentialOn) {
             float baseX = 14f;
             float baseY = GameConfig.VIRTUAL_H - 20f;
@@ -661,7 +652,6 @@ public class GameplayScreen implements Screen {
             shapes.rect(barsX, baseY - 2f * (barH + gap), barW * energyPct, barH);
         }
 
-        // Fade overlay
         if (transition.fade > 0f) {
             shapes.setColor(0f, 0f, 0f, transition.fade);
             shapes.rect(0, 0, GameConfig.VIRTUAL_W, GameConfig.VIRTUAL_H);
@@ -672,7 +662,6 @@ public class GameplayScreen implements Screen {
         batch.setProjectionMatrix(uiCamera.combined);
         batch.begin();
 
-        // Legion icon (safe)
         if (hudEssentialOn) {
             TextureRegion legion = sprites.legionSalamanders();
             if (legion != null) {
@@ -684,10 +673,7 @@ public class GameplayScreen implements Screen {
                 float size = 32f;
                 batch.draw(legion, circleCx - size / 2f, circleCy - size / 2f, size, size);
             }
-        }
 
-        // Essential text
-        if (hudEssentialOn) {
             int hp = run.player.getHealth().getHp();
             int maxHp = run.player.getHealth().getMaxHp();
             int enemiesAlive = run.meleeEnemies.size + run.rangedEnemies.size;
@@ -695,16 +681,13 @@ public class GameplayScreen implements Screen {
             font.draw(batch, "HP " + hp + "/" + maxHp, 14f, GameConfig.VIRTUAL_H - 60f);
             font.draw(batch, "Enemies: " + enemiesAlive, 14f, GameConfig.VIRTUAL_H - 78f);
 
-            // Weapon placeholder
-            float panelW = 220f;
-            float x = GameConfig.VIRTUAL_W - panelW - 12f;
+            float x = GameConfig.VIRTUAL_W - 220f - 12f;
             float y = 12f;
             font.draw(batch, "WEAPON", x + 10f, y + 50f);
             font.draw(batch, "Current: [TODO]", x + 10f, y + 34f);
             font.draw(batch, "Ammo: [--/--]", x + 10f, y + 18f);
         }
 
-        // Debug/info
         if (hudInfoOn) {
             float x = GameConfig.VIRTUAL_W - 248f;
             float y = GameConfig.VIRTUAL_H - 18f;
@@ -714,22 +697,26 @@ public class GameplayScreen implements Screen {
 
             font.draw(batch, "DEBUG / INFO", x, y); y -= 18f;
             font.draw(batch, "FPS: " + fps, x, y); y -= 18f;
+
+            font.draw(batch, String.format("Frame avg: %.1fms  max: %.1fms  spikes: %d",
+                frameStats.avgMs(), frameStats.maxMs(), frameStats.spikeCount()), x, y); y -= 18f;
+
             font.draw(batch, "Seed: " + run.run.seed, x, y); y -= 18f;
             font.draw(batch, "Room: " + (run.run.index + 1) + "/" + run.run.totalRooms + " [" + room.type + "]", x, y); y -= 18f;
             font.draw(batch, "Tpl: " + room.template.id + " | Budget: " + room.budget, x, y); y -= 18f;
-            font.draw(batch, "Plan M:" + room.meleeCount + " R:" + room.rangedCount, x, y); y -= 18f;
 
             font.draw(batch, String.format("ShootCD: %.2f", run.shootCooldown), x, y); y -= 18f;
             font.draw(batch, "ChoiceRoom: " + run.inChoiceRoom, x, y); y -= 18f;
 
-            font.draw(batch,
-                "Relics: " + run.relics.getOwned().size +
-                    " | Dmg+" + run.relics.getBonusProjectileDamage() +
-                    " | FRx" + String.format("%.2f", (1f / run.relics.getFireRateMultiplier())) +
-                    " | P" + run.relics.getPiercingShots(),
-                x, y);
+            font.draw(batch, "STRICT: " + (strictModeOn ? "ON" : "OFF") +
+                " freeze=" + (strictFreezeOnFail ? "ON" : "OFF") +
+                " frozen=" + (frozenByStrict ? "YES" : "NO"), x, y); y -= 18f;
 
-            font.draw(batch, "F1 Essential | F2 Info | H hitbox | U hurtbox | F5 reload", x, 20f);
+            if (lastStrictError != null) {
+                font.draw(batch, "Last strict: " + lastStrictError, x, y); y -= 18f;
+            }
+
+            font.draw(batch, "F5 reload | F6 snapshot | F7 strict | F8 freeze | F9 unfreeze", x, 20f);
         }
 
         batch.end();
@@ -737,7 +724,6 @@ public class GameplayScreen implements Screen {
 
     private void renderCriticalOverlay() {
         if (run.player == null) return;
-
         if (!run.player.isAlive()) {
             batch.setProjectionMatrix(uiCamera.combined);
             batch.begin();
@@ -773,7 +759,7 @@ public class GameplayScreen implements Screen {
     private void openDoor() {
         if (doorBody == null) return;
         run.combat.purgeForBody(doorBody);
-        run.physics.world.destroyBody(doorBody);
+        destroyQueue.queueBody(doorBody);
         doorBody = null;
         doorClosed = false;
     }
@@ -783,7 +769,7 @@ public class GameplayScreen implements Screen {
             try {
                 if (run.physics != null && doorBody.getWorld() == run.physics.world) {
                     run.combat.purgeForBody(doorBody);
-                    run.physics.world.destroyBody(doorBody);
+                    destroyQueue.queueBody(doorBody);
                 }
             } catch (Exception ignored) {
             } finally {
@@ -803,11 +789,56 @@ public class GameplayScreen implements Screen {
         for (int i = 0; i < run.rangedEnemies.size; i++) rangedAnimTimes.add(0f);
     }
 
-    @Override
-    public void resize(int width, int height) {
-        worldViewport.update(width, height, true);
+    private void rebuildBackground() {
+        background = new BackgroundParallax(
+            sprites.forestBase(),
+            sprites.forestMid(),
+            PARALLAX_BASE,
+            PARALLAX_MID,
+            GameConfig.VIRTUAL_H
+        );
     }
 
+    private void validateInvariants() {
+        if (run.meleeEnemies.size != meleeAnimTimes.size) onStrictFail("Desync melee timers: enemies=" + run.meleeEnemies.size + " timers=" + meleeAnimTimes.size);
+        if (run.rangedEnemies.size != rangedAnimTimes.size) onStrictFail("Desync ranged timers: enemies=" + run.rangedEnemies.size + " timers=" + rangedAnimTimes.size);
+
+        if (doorBody != null && run.physics != null && doorBody.getWorld() != run.physics.world) onStrictFail("Door world mismatch");
+        if (run.inChoiceRoom && (run.meleeEnemies.size + run.rangedEnemies.size) > 0) onStrictFail("Choice room has enemies alive");
+
+        // recover actions (non-crash)
+        if (run.meleeEnemies.size != meleeAnimTimes.size) syncEnemyAnimTimers();
+        if (run.rangedEnemies.size != rangedAnimTimes.size) syncEnemyAnimTimers();
+        if (doorBody != null && run.physics != null && doorBody.getWorld() != run.physics.world) resetDoor();
+    }
+
+    private void onStrictFail(String msg) {
+        lastStrictError = msg;
+        Gdx.app.error("STRICT", msg + " | " + buildSnapshotString("strict"));
+        if (strictModeOn && strictFreezeOnFail) frozenByStrict = true;
+    }
+
+    private String buildSnapshotString(String phase) {
+        try {
+            RoomInstance r = run.run.current();
+            return "phase=" + phase +
+                " seed=" + run.run.seed +
+                " room=" + (run.run.index + 1) + "/" + run.run.totalRooms +
+                " type=" + r.type +
+                " tpl=" + r.template.id +
+                " hp=" + run.player.getHealth().getHp() + "/" + run.player.getHealth().getMaxHp() +
+                " pState=" + run.player.getState() +
+                " melee=" + run.meleeEnemies.size +
+                " ranged=" + run.rangedEnemies.size +
+                " proj=" + run.projectiles.projectiles.size +
+                " pickups=" + run.pickups.size +
+                " doorClosed=" + doorClosed;
+        } catch (Throwable t) {
+            return "phase=" + phase + " (snapshot failed: " + t.getMessage() + ")";
+        }
+    }
+
+    @Override public void resize(int width, int height) { worldViewport.update(width, height, true); }
     @Override public void pause() {}
     @Override public void resume() {}
     @Override public void hide() {}

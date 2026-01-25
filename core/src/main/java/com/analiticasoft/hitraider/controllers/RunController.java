@@ -1,29 +1,39 @@
 package com.analiticasoft.hitraider.controllers;
 
-import com.analiticasoft.hitraider.combat.*;
+import com.analiticasoft.hitraider.combat.CombatSystem;
+import com.analiticasoft.hitraider.combat.Projectile;
+import com.analiticasoft.hitraider.combat.ProjectileSystem;
 import com.analiticasoft.hitraider.config.PhysicsTuning;
 import com.analiticasoft.hitraider.entities.MeleeEnemy;
 import com.analiticasoft.hitraider.entities.Player;
 import com.analiticasoft.hitraider.entities.RangedEnemy;
 import com.analiticasoft.hitraider.physics.GameContactListener;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
+import com.analiticasoft.hitraider.physics.PhysicsDestroyQueue;
 import com.analiticasoft.hitraider.physics.PhysicsWorld;
 import com.analiticasoft.hitraider.render.CharacterAnimator;
 import com.analiticasoft.hitraider.render.DebugAnimLibrary;
-import com.analiticasoft.hitraider.relics.*;
+import com.analiticasoft.hitraider.relics.RelicManager;
+import com.analiticasoft.hitraider.relics.RelicPickup;
+import com.analiticasoft.hitraider.relics.RelicType;
 import com.analiticasoft.hitraider.world.*;
+
 import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.utils.Array;
 
 import java.util.Random;
 
 /**
- * Encapsula TODA la lógica de run/rooms/spawns/drops/choice.
- * GameplayScreen solo orquesta.
+ * RunController (Fortified)
+ *
+ * Guarantees:
+ * - No destroyBody() except HARD RESET in buildPhysicsIfNeeded(true)
+ * - All transient bodies (enemies, pickups, projectiles) are queued into PhysicsDestroyQueue
+ * - On room switch, old bodies are queued and (if possible) flushed immediately (world not locked)
  */
 public class RunController {
 
-    // External dependencies (provided by GameplayScreen)
     public PhysicsWorld physics;
     public CombatSystem combat;
     public ProjectileSystem projectiles;
@@ -55,7 +65,15 @@ public class RunController {
 
     public float shootCooldown = 0f;
 
+    // Fortification
+    private PhysicsDestroyQueue destroyQueue;
+
     private final Random rng = new Random();
+
+    public void setDestroyQueue(PhysicsDestroyQueue q) {
+        this.destroyQueue = q;
+        if (projectiles != null) projectiles.setDestroyQueue(q);
+    }
 
     public void buildTemplates() {
         templates.clear();
@@ -84,34 +102,29 @@ public class RunController {
         loadCurrentRoom(rebuildPhysics);
     }
 
+    /**
+     * HARD RESET allowed: destroys ALL bodies in old world and disposes it.
+     * This is one of the only allowed places to call world.destroyBody directly.
+     */
     public void buildPhysicsIfNeeded(boolean rebuildPhysics) {
         if (!rebuildPhysics) return;
 
-        // --- HARD RESET of old world (prevents native crashes) ---
         if (physics != null) {
             try {
-                // 1) Detach listener first
                 physics.world.setContactListener(null);
-
-                // 2) Destroy ALL bodies in old world safely (world must NOT be locked here)
-                com.badlogic.gdx.utils.Array<com.badlogic.gdx.physics.box2d.Body> bodies = new com.badlogic.gdx.utils.Array<>();
+                Array<Body> bodies = new Array<>();
                 physics.world.getBodies(bodies);
                 for (int i = bodies.size - 1; i >= 0; i--) {
-                    com.badlogic.gdx.physics.box2d.Body b = bodies.get(i);
-                    if (b != null && b.getWorld() != null) {
-                        physics.world.destroyBody(b);
-                    }
+                    Body b = bodies.get(i);
+                    if (b != null && b.getWorld() != null) physics.world.destroyBody(b);
                 }
-            } catch (Exception ignored) {
-                // if something goes wrong, we still dispose below
+            } catch (Throwable ignored) {
             } finally {
-                // 3) Dispose old world
                 physics.dispose();
                 physics = null;
             }
         }
 
-        // Also drop old references (important)
         combat = null;
         projectiles = null;
         contactListener = null;
@@ -122,10 +135,13 @@ public class RunController {
         rangedAnims.clear();
         pickups.clear();
 
-        // 4) Build new world + systems
         physics = new PhysicsWorld(new Vector2(0f, PhysicsTuning.GRAVITY_Y));
         combat = new CombatSystem(physics.world);
         projectiles = new ProjectileSystem(physics.world);
+
+        // Inject destroy queue
+        if (destroyQueue != null) projectiles.setDestroyQueue(destroyQueue);
+
         contactListener = new GameContactListener(combat, projectiles);
         physics.world.setContactListener(contactListener);
 
@@ -133,10 +149,59 @@ public class RunController {
         player = new Player(physics.world, 120f, 140f);
     }
 
+    /**
+     * Queues and clears all transient bodies from the current room.
+     * Does NOT flush; caller may flush if world is not locked.
+     */
+    private void queueDestroyTransients() {
+        if (destroyQueue == null || physics == null) return;
+
+        // Enemies
+        for (int i = meleeEnemies.size - 1; i >= 0; i--) {
+            MeleeEnemy e = meleeEnemies.get(i);
+            if (e != null && e.body != null && e.body.getWorld() == physics.world) {
+                destroyQueue.queueBody(e.body);
+            }
+        }
+        for (int i = rangedEnemies.size - 1; i >= 0; i--) {
+            RangedEnemy e = rangedEnemies.get(i);
+            if (e != null && e.body != null && e.body.getWorld() == physics.world) {
+                destroyQueue.queueBody(e.body);
+            }
+        }
+
+        // Pickups
+        for (int i = pickups.size - 1; i >= 0; i--) {
+            RelicPickup p = pickups.get(i);
+            if (p != null && p.body != null && p.body.getWorld() == physics.world) {
+                destroyQueue.queueBody(p.body);
+            }
+        }
+
+        // Projectiles still ALIVE have bodies
+        if (projectiles != null) {
+            for (int i = projectiles.projectiles.size - 1; i >= 0; i--) {
+                Projectile pr = projectiles.projectiles.get(i);
+                if (pr != null && pr.state == Projectile.State.ALIVE && pr.body != null && pr.body.getWorld() == physics.world) {
+                    destroyQueue.queueBody(pr.body);
+                }
+            }
+            projectiles.projectiles.clear();
+        }
+    }
+
     public void loadCurrentRoom(boolean rebuildPhysics) {
         buildPhysicsIfNeeded(rebuildPhysics);
-        destroyTransientBodies();
 
+        // Queue-destroy previous room transients (prevents ghost bodies)
+        queueDestroyTransients();
+
+        // If we are outside step, we can flush right away safely
+        if (destroyQueue != null && physics != null && !physics.world.isLocked()) {
+            destroyQueue.flush(physics.world, combat);
+        }
+
+        // Clear arrays
         meleeEnemies.clear();
         rangedEnemies.clear();
         meleeAnims.clear();
@@ -149,7 +214,11 @@ public class RunController {
 
         RoomInstance room = run.current();
 
-        player.body.setTransform(PhysicsConstants.toMeters(room.template.entryXpx), PhysicsConstants.toMeters(room.template.entryYpx), 0f);
+        player.body.setTransform(
+            PhysicsConstants.toMeters(room.template.entryXpx),
+            PhysicsConstants.toMeters(room.template.entryYpx),
+            0f
+        );
         player.body.setLinearVelocity(0f, 0f);
 
         if (room.type == RoomType.CHOICE) {
@@ -168,6 +237,7 @@ public class RunController {
         for (int i = 0; i < room.meleeCount; i++) {
             Vector2 sp = room.spawnOrder.get(si++ % room.spawnOrder.size);
             meleeEnemies.add(new MeleeEnemy(physics.world, sp.x, sp.y));
+
             CharacterAnimator a = new CharacterAnimator();
             DebugAnimLibrary.defineMeleeEnemy(a);
             meleeAnims.add(a);
@@ -176,6 +246,7 @@ public class RunController {
         for (int i = 0; i < room.rangedCount; i++) {
             Vector2 sp = room.spawnOrder.get(si++ % room.spawnOrder.size);
             rangedEnemies.add(new RangedEnemy(physics.world, sp.x, sp.y));
+
             CharacterAnimator a = new CharacterAnimator();
             DebugAnimLibrary.defineMeleeEnemy(a);
             rangedAnims.add(a);
@@ -186,9 +257,8 @@ public class RunController {
         Random rr = new Random(room.seed ^ 0x1234ABCD);
         RelicType a = dropRules.rollRelic(rr);
         RelicType b = dropRules.rollRelic(rr);
-        if (a == b) {
-            b = (a == RelicType.BONUS_PROJECTILE_DAMAGE) ? RelicType.FIRE_RATE_UP : RelicType.BONUS_PROJECTILE_DAMAGE;
-        }
+
+        if (a == b) b = (a == RelicType.BONUS_PROJECTILE_DAMAGE) ? RelicType.FIRE_RATE_UP : RelicType.BONUS_PROJECTILE_DAMAGE;
 
         pickups.add(new RelicPickup(physics.world, a, 520f, 220f));
         pickups.add(new RelicPickup(physics.world, b, 820f, 220f));
@@ -205,26 +275,31 @@ public class RunController {
         relicDroppedThisRoom = true;
     }
 
+    /**
+     * Pickups are collected via ContactListener; we process them here.
+     * IMPORTANT: destruction goes through destroyQueue.
+     */
     public void processPickupsChoiceAware() {
         for (int i = pickups.size - 1; i >= 0; i--) {
             RelicPickup p = pickups.get(i);
             if (!p.collected) continue;
 
             if (inChoiceRoom) {
-                // remove all pickup bodies, keep chosen type
                 RelicType chosen = p.type;
+
                 for (int k = pickups.size - 1; k >= 0; k--) {
                     RelicPickup other = pickups.get(k);
-                    if (other.body.getWorld() != null) physics.world.destroyBody(other.body);
+                    if (destroyQueue != null) destroyQueue.queueBody(other.body);
                     pickups.removeIndex(k);
                 }
+
                 relics.add(chosen);
                 inChoiceRoom = false;
                 return;
             }
 
             relics.add(p.type);
-            physics.world.destroyBody(p.body);
+            if (destroyQueue != null) destroyQueue.queueBody(p.body);
             pickups.removeIndex(i);
         }
     }
@@ -232,49 +307,5 @@ public class RunController {
     public boolean canExit() {
         if (run.current().type == RoomType.CHOICE) return !inChoiceRoom;
         return encounter.getState() == EncounterManager.State.CLEAR;
-    }
-
-    public void destroyTransientBodies() {
-        if (physics == null) return;
-
-        // Destroy melee enemies
-        for (int i = meleeEnemies.size - 1; i >= 0; i--) {
-            MeleeEnemy e = meleeEnemies.get(i);
-            if (e != null && e.body != null && e.body.getWorld() != null) {
-                combat.purgeForBody(e.body);
-                physics.world.destroyBody(e.body);
-            }
-        }
-
-        // Destroy ranged enemies
-        for (int i = rangedEnemies.size - 1; i >= 0; i--) {
-            RangedEnemy e = rangedEnemies.get(i);
-            if (e != null && e.body != null && e.body.getWorld() != null) {
-                physics.world.destroyBody(e.body);
-            }
-        }
-
-        // Destroy pickups
-        for (int i = pickups.size - 1; i >= 0; i--) {
-            RelicPickup p = pickups.get(i);
-            if (p != null && p.body != null && p.body.getWorld() != null) {
-                physics.world.destroyBody(p.body);
-            }
-        }
-
-        // Destroy projectiles (alive ones still have bodies)
-        if (projectiles != null) {
-            for (int i = projectiles.projectiles.size - 1; i >= 0; i--) {
-                Projectile pr = projectiles.projectiles.get(i);
-                if (pr != null && pr.state == Projectile.State.ALIVE && pr.body != null && pr.body.getWorld() != null) {
-                    physics.world.destroyBody(pr.body);
-                }
-            }
-            projectiles.projectiles.clear();
-        }
-
-        // Clear combat hitboxes list (safe)
-        // purgeForBody already removes per-body hitboxes; but if any remain:
-        // easiest: rebuild CombatSystem on full reset; for room swap, this is usually enough.
     }
 }
