@@ -3,6 +3,7 @@ package com.analiticasoft.hitraider.entities;
 import com.analiticasoft.hitraider.combat.Damageable;
 import com.analiticasoft.hitraider.combat.Faction;
 import com.analiticasoft.hitraider.combat.HealthComponent;
+import com.analiticasoft.hitraider.physics.CollisionBits;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
@@ -22,10 +23,9 @@ public class RangedEnemy implements Damageable {
     private boolean shotThisFrame = false;
     private int facingDir = 1;
 
-    // tuning
     private static final float AGGRO_RANGE_PX = 340f;
     private static final float KEEP_DISTANCE_PX = 160f;
-    private static final float KITE_SPEED = 1.6f;      // m/s
+    private static final float KITE_SPEED = 1.6f;
     private static final float TELEGRAPH_TIME = 0.20f;
     private static final float COOLDOWN_TIME = 0.55f;
 
@@ -49,6 +49,10 @@ public class RangedEnemy implements Damageable {
         fd.density = 1.0f;
         fd.friction = 0.4f;
         fd.restitution = 0.0f;
+
+        // ✅ Enemy collisions
+        fd.filter.categoryBits = CollisionBits.ENEMY;
+        fd.filter.maskBits = CollisionBits.MASK_ENEMY_BODY;
 
         Fixture fx = body.createFixture(fd);
         fx.setUserData(this);
@@ -88,13 +92,9 @@ public class RangedEnemy implements Damageable {
                 if (dist <= AGGRO_RANGE_PX) state = State.KITE;
             }
             case KITE -> {
-                if (dist > AGGRO_RANGE_PX) {
-                    state = State.IDLE;
-                    break;
-                }
+                if (dist > AGGRO_RANGE_PX) { state = State.IDLE; break; }
 
                 Vector2 v = body.getLinearVelocity();
-
                 if (dist < KEEP_DISTANCE_PX) {
                     body.setLinearVelocity(-facingDir * KITE_SPEED, v.y);
                 } else {
@@ -137,7 +137,6 @@ public class RangedEnemy implements Damageable {
     public float getXpx() { return PhysicsConstants.toPixels(body.getPosition().x); }
     public float getYpx() { return PhysicsConstants.toPixels(body.getPosition().y); }
 
-    // Damageable
     @Override public Faction getFaction() { return Faction.ENEMY; }
     @Override public boolean isAlive() { return health.isAlive(); }
     @Override public HealthComponent getHealth() { return health; }

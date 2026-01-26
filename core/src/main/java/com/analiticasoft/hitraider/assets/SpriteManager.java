@@ -7,9 +7,9 @@ import java.util.function.IntFunction;
 
 /**
  * Central Sprite System:
- * - Loads player/enemy/UI/backgrounds
- * - Safe: missing assets return null and game continues
- * - Can reload at runtime (F5) for live iteration
+ * - Loads player/enemy/UI/backgrounds safely
+ * - Missing assets => null/fallback
+ * - reload() supported
  */
 public class SpriteManager {
 
@@ -40,7 +40,7 @@ public class SpriteManager {
         forestBase = SafeAssets.textureOrNull(SpritePaths.FOREST_BASE);
         forestMid  = SafeAssets.textureOrNull(SpritePaths.FOREST_MID);
 
-        // Player sequences (consecutive frames; stop when a frame is missing)
+        // Player sequences
         loadFrames(player.idle, SpritePaths::pIdle, 64);
         loadFrames(player.run, SpritePaths::pRun, 64);
         loadFrames(player.jump, SpritePaths::pJump, 32);
@@ -62,11 +62,11 @@ public class SpriteManager {
         loadFrames(eldarRanged.idle, SpritePaths::erIdle, 64);
         loadFrames(eldarRanged.run, SpritePaths::erRun, 64);
         loadFrames(eldarRanged.telegraph, SpritePaths::erTelegraph, 64);
-        loadFrames(eldarRanged.attack, SpritePaths::erShoot, 64); // attack visual = shoot
+        loadFrames(eldarRanged.attack, SpritePaths::erShoot, 64);
         loadFrames(eldarRanged.hurt, SpritePaths::erHurt, 32);
         loadFrames(eldarRanged.dead, SpritePaths::erDead, 32);
 
-        // Default tuning (you can tweak here)
+        // Tuning defaults
         player.scale = 0.30f;
         player.feetOffsetPx = 48f;
 
@@ -89,12 +89,12 @@ public class SpriteManager {
     public PlayerSprites player() { return player; }
     public EnemySprites eldarMelee() { return eldarMelee; }
     public EnemySprites eldarRanged() { return eldarRanged; }
+
     public TextureRegion legionSalamanders() { return legionSalamanders; }
 
     public Texture forestBase() { return forestBase; }
     public Texture forestMid() { return forestMid; }
 
-    /** Reload during runtime (useful for hot iteration) */
     public void reload() {
         dispose();
         loaded = false;

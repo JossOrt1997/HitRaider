@@ -1,0 +1,233 @@
+=== HIT-RAIDER CRASH REPORT ===
+Timestamp: 20260125_135259
+
+--- System ---
+OS: Windows 10 10.0
+Java: 21.0.8 (Oracle Corporation)
+Arch: amd64
+
+--- Context ---
+phase: unknown
+screen: com.analiticasoft.hitraider.screens.GameplayScreen
+fps: 0
+
+--- Exception ---
+java.lang.NullPointerException: Cannot invoke "com.analiticasoft.hitraider.input.InputState.isJustPressed(com.analiticasoft.hitraider.input.Action)" because "input" is null
+
+java.lang.NullPointerException: Cannot invoke "com.analiticasoft.hitraider.input.InputState.isJustPressed(com.analiticasoft.hitraider.input.Action)" because "input" is null
+	at com.analiticasoft.hitraider.entities.Player.update(Player.java:191)
+	at com.analiticasoft.hitraider.gameplay.GameplayRuntime.updatePlayer(GameplayRuntime.java:181)
+	at com.analiticasoft.hitraider.gameplay.GameplayRuntime.tick(GameplayRuntime.java:104)
+	at com.analiticasoft.hitraider.screens.GameplayScreen.render(GameplayScreen.java:142)
+	at com.badlogic.gdx.Game.render(Game.java:48)
+	at com.analiticasoft.hitraider.game.HitRaiderGame.lambda$render$1(HitRaiderGame.java:47)
+	at com.analiticasoft.hitraider.diagnostics.ErrorGuard.guardFrame(ErrorGuard.java:31)
+	at com.analiticasoft.hitraider.game.HitRaiderGame.render(HitRaiderGame.java:47)
+	at com.badlogic.gdx.backends.lwjgl3.Lwjgl3Window.update(Lwjgl3Window.java:435)
+	at com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application.loop(Lwjgl3Application.java:181)
+	at com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application.<init>(Lwjgl3Application.java:153)
+	at com.analiticasoft.hitraider.lwjgl3.Lwjgl3Launcher.createApplication(Lwjgl3Launcher.java:15)
+	at com.analiticasoft.hitraider.lwjgl3.Lwjgl3Launcher.main(Lwjgl3Launcher.java:11)
+
+
+--- Native hs_err excerpt (hs_err_pid17248.log) ---
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00007ffa88dad309, pid=17248, tid=33904
+#
+# JRE version: OpenJDK Runtime Environment Temurin-17.0.17+10 (17.0.17+10) (build 17.0.17+10)
+# Java VM: OpenJDK 64-Bit Server VM Temurin-17.0.17+10 (17.0.17+10, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, windows-amd64)
+# Problematic frame:
+# C  [gdx-box2d64.dll+0x1d309]
+#
+# No core dump will be written. Minidumps are not enabled by default on client versions of Windows
+#
+# If you would like to submit a bug report, please visit:
+#   https://github.com/adoptium/adoptium-support/issues
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -Dfile.encoding=UTF-8 -Duser.country=US -Duser.language=en -Duser.variant com.analiticasoft.hitraider.lwjgl3.Lwjgl3Launcher
+
+Host: AMD Ryzen 5 3600 6-Core Processor              , 12 cores, 31G,  Windows 10 , 64 bit Build 19041 (10.0.19041.6807)
+Time: Thu Jan 22 10:39:27 2026 Central Standard Time (Mexico) elapsed time: 2.927885 seconds (0d 0h 0m 2s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x000001e954d106a0):  JavaThread "main" [_thread_in_native, id=33904, stack(0x0000006847700000,0x0000006847800000)]
+
+Stack: [0x0000006847700000,0x0000006847800000],  sp=0x00000068477feb60,  free space=1018k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  [gdx-box2d64.dll+0x1d309]
+
+Java frames: (J=compiled Java code, j=interpreted, Vv=VM code)
+j  com.badlogic.gdx.physics.box2d.World.jniDestroyBody(JJ)V+0
+j  com.badlogic.gdx.physics.box2d.World.destroyBody(Lcom/badlogic/gdx/physics/box2d/Body;)V+42
+j  com.analiticasoft.hitraider.controllers.RunController.destroyTransientBodies()V+77
+j  com.analiticasoft.hitraider.controllers.RunController.loadCurrentRoom(Z)V+6
+j  com.analiticasoft.hitraider.controllers.RunController.startNewRun(Z)V+42
+j  com.analiticasoft.hitraider.screens.GameplayScreen.update(F)V+38
+J 1501 c1 com.analiticasoft.hitraider.screens.GameplayScreen.render(F)V (218 bytes) @ 0x000001e95cae74fc [0x000001e95cae6b20+0x00000000000009dc]
+J 1500 c1 com.badlogic.gdx.backends.lwjgl3.Lwjgl3Window.update()Z (312 bytes) @ 0x000001e95cadaa8c [0x000001e95cad96a0+0x00000000000013ec]
+j  com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application.loop()V+120
+j  com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application.<init>(Lcom/badlogic/gdx/ApplicationListener;Lcom/badlogic/gdx/backends/lwjgl3/Lwjgl3ApplicationConfiguration;)V+269
+j  com.analiticasoft.hitraider.lwjgl3.Lwjgl3Launcher.createApplication()Lcom/badlogic/gdx/backends/lwjgl3/Lwjgl3Application;+14
+j  com.analiticasoft.hitraider.lwjgl3.Lwjgl3Launcher.main([Ljava/lang/String;)V+7
+v  ~StubRoutines::call_stub
+
+siginfo: EXCEPTION_ACCESS_VIOLATION (0xc0000005), reading address 0xffffffffffffffff
+
+
+Registers:
+RAX=0x000001e94887b4c0, RBX=0x000000003f800000, RCX=0x000001e948869990, RDX=0x40d000004887b480
+RSP=0x00000068477feb60, RBP=0x00000068477fed38, RSI=0x000001e948869990, RDI=0x00000000000004ea
+R8 =0x0000000000000001, R9 =0x000001e954d0ebc0, R10=0x000001e943702ad0, R11=0x00000068477febb0
+R12=0x000001e9488506f0, R13=0x000001e94886ac00, R14=0x00000068477fed78, R15=0x000001e954d106a0
+RIP=0x00007ffa88dad309, EFLAGS=0x0000000000010206
+
+XMM[0]=0x0000000000000000 0x0000000000000000
+XMM[1]=0x0000000000000000 0x0000000000000000
+XMM[2]=0x0000000000000000 0x0000000040a51eb8
+XMM[3]=0x0000000000000000 0x0000000041200000
+XMM[4]=0x0000000000000000 0x0000000043caa3d6
+XMM[5]=0x0000000000000000 0x000000003f8147ae
+XMM[6]=0x0000000000000000 0x0000000043bd0000
+XMM[7]=0x0000000000000000 0x0000000043c20000
+XMM[8]=0x0000000000000000 0x000000003eb80000
+XMM[9]=0x0000000000000000 0x000000061fe5c588
+XMM[10]=0x0000000000000000 0x0000000041900000
+XMM[11]=0x0000000000000000 0x0000000000000000
+XMM[12]=0x0000000000000000 0x0000000041200000
+XMM[13]=0x0000000000000000 0x0000000043bc8000
+XMM[14]=0x0000000000000000 0x0000000043bc8000
+XMM[15]=0x0000000000000000 0x000000061fdba668
+  MXCSR=0x00001fa0
+
+
+Register to memory mapping:
+
+RIP=0x00007ffa88dad309 gdx-box2d64.dll
+RAX=0x000001e94887b4c0 points into unknown readable memory: 0x0000002600000000 | 00 00 00 00 26 00 00 00
+RBX=0x000000003f800000 is an unknown value
+RCX=0x000001e948869990 points into unknown readable memory: 0x0000000000000008 | 08 00 00 00 00 00 00 00
+RDX=0x40d000004887b480 is an unknown value
+RSP=0x00000068477feb60 is pointing into the stack for thread: 0x000001e954d106a0
+RBP=0x00000068477fed38 is pointing into the stack for thread: 0x000001e954d106a0
+RSI=0x000001e948869990 points into unknown readable memory: 0x0000000000000008 | 08 00 00 00 00 00 00 00
+RDI=0x00000000000004ea is an unknown value
+R8 =0x0000000000000001 is an unknown value
+R9 =0x000001e954d0ebc0 points into unknown readable memory: 0x0000004000000001 | 01 00 00 00 40 00 00 00
+R10={method} {0x000001e943702ad8} 'getUseDefaultContactFilter' '()Z' in 'com/badlogic/gdx/physics/box2d/World'
+R11=0x00000068477febb0 is pointing into the stack for thread: 0x000001e954d106a0
+R12=0x000001e9488506f0 points into unknown readable memory: 0x000001e948869a80 | 80 9a 86 48 e9 01 00 00
+R13=0x000001e94886ac00 points into unknown readable memory: 0x0000003400000002 | 02 00 00 00 34 00 00 00
+R14=0x00000068477fed78 is pointing into the stack for thread: 0x000001e954d106a0
+R15=0x000001e954d106a0 is a thread
+
+
+Top of Stack: (sp=0x00000068477feb60)
+0x00000068477feb60:   000001e954d106a0 0000000000000000
+0x00000068477feb70:   000001e954d106a0 00007ffa207c88c0
+0x00000068477feb80:   00007ffa20db0e98 000000003f800000
+0x00000068477feb90:   000001e948869990 00000000000004ea
+0x00000068477feba0:   000001e9488506f0 00007ffa88daf483
+0x00000068477febb0:   000001e954d106a0 00000068477fed78
+0x00000068477febc0:   000001e9488506f0 00007ffa88dc88dc
+0x00000068477febd0:   00000068477fed78 000001e954d10958
+0x00000068477febe0:   00000000000004ea 00000068477fed38
+0x00000068477febf0:   000001e9488506f0 000001e94886ac00
+0x00000068477fec00:   00000068477fed78 00007ffa88db47bc
+0x00000068477fec10:   000001e94366ebb5 000001e9000000b6
+0x00000068477fec20:   000001e94366ed48 000001e94886ac00
+0x00000068477fec30:   00007ffa88dd4700 000001e954d10958
+0x00000068477fec40:   00000068477fed78 000001e943702f60
+0x00000068477fec50:   00007ffa88dd46a0 000001e954d10958
+0x00000068477fec60:   00000068477fed78 fffffffe00000000
+0x00000068477fec70:   0000000000000000 000001e943703000
+0x00000068477fec80:   0000000000000110 0000000000000000
+0x00000068477fec90:   000001e943703000 000001e963d9d6e1
+0x00000068477feca0:   0000000000000110 00000000000000b6
+0x00000068477fecb0:   00000068477fed59 00007ffa207c8106
+0x00000068477fecc0:   000001e943702f60 0000000000000000
+0x00000068477fecd0:   000001e954d10f68 00000000000003d8
+0x00000068477fece0:   000001e954d10f68 00000000000003d8
+0x00000068477fecf0:   00000068477fecf0 0000000000000000
+0x00000068477fed00:   00000068477fed78 000001e943714680
+0x00000068477fed10:   0000000000000000 000000061fe8c720
+0x00000068477fed20:   000001e943703000 0000000000000000
+0x00000068477fed30:   00000068477fed58 00000068477fedc8
+0x00000068477fed40:   000001e963d99520 0000000000000000
+0x00000068477fed50:   000001e963d9aff8 000001e94886ac00 
+
+Instructions: (pc=0x00007ffa88dad309)
+0x00007ffa88dad209:   83 e2 20 e8 7f dd fe ff 66 0f ef c9 48 8d 0d 7e
+0x00007ffa88dad219:   2e 02 00 f3 0f 5a 8b a8 00 00 00 66 48 0f 7e ca
+0x00007ffa88dad229:   e8 62 dd fe ff 8b 53 08 48 8d 0d 80 2e 02 00 e8
+0x00007ffa88dad239:   53 dd fe ff 48 8d 0d 9e 2e 02 00 e8 47 dd fe ff
+0x00007ffa88dad249:   48 8b 5b 70 48 85 db 74 31 48 8d 2d 8b 2e 02 00
+0x00007ffa88dad259:   48 8d 3d 89 2e 02 00 48 89 e9 e8 28 dd fe ff 48
+0x00007ffa88dad269:   89 d9 89 f2 e8 ee 0a 00 00 48 89 f9 e8 16 dd fe
+0x00007ffa88dad279:   ff 48 8b 5b 08 48 85 db 75 dd 48 8d 0d 64 2e 02
+0x00007ffa88dad289:   00 48 83 c4 28 5b 5e 5f 5d e9 f9 dc fe ff 90 90
+0x00007ffa88dad299:   90 90 90 90 90 90 90 c3 66 66 2e 0f 1f 84 00 00
+0x00007ffa88dad2a9:   00 00 00 0f 1f 40 00 c3 90 66 66 2e 0f 1f 84 00
+0x00007ffa88dad2b9:   00 00 00 00 0f 1f 00 53 48 83 ec 20 48 89 cb e8
+0x00007ffa88dad2c9:   33 62 fe ff 48 8d 05 b4 ed 01 00 48 c7 43 58 00
+0x00007ffa88dad2d9:   00 00 00 48 89 43 68 48 8d 05 99 ed 01 00 c7 43
+0x00007ffa88dad2e9:   60 00 00 00 00 48 89 43 70 48 c7 43 78 00 00 00
+0x00007ffa88dad2f9:   00 48 83 c4 20 5b c3 41 54 57 56 53 48 83 ec 28
+0x00007ffa88dad309:   48 8b 42 60 48 8b 78 10 48 8b 42 68 48 89 cb 48
+0x00007ffa88dad319:   8b 49 70 48 8b 70 10 49 89 d4 48 85 c9 74 0a f6
+0x00007ffa88dad329:   42 08 02 0f 85 ae 00 00 00 49 8b 44 24 10 48 85
+0x00007ffa88dad339:   c0 74 09 49 8b 54 24 18 48 89 50 18 49 8b 54 24
+0x00007ffa88dad349:   18 48 85 d2 74 04 48 89 42 10 4c 39 63 58 0f 84
+0x00007ffa88dad359:   cb 00 00 00 49 8b 44 24 30 48 85 c0 74 09 49 8b
+0x00007ffa88dad369:   54 24 38 48 89 50 18 49 8b 54 24 38 48 85 d2 74
+0x00007ffa88dad379:   04 48 89 42 10 49 8d 44 24 20 48 39 87 88 00 00
+0x00007ffa88dad389:   00 0f 84 88 00 00 00 49 8b 44 24 50 48 85 c0 74
+0x00007ffa88dad399:   09 49 8b 54 24 58 48 89 50 18 49 8b 54 24 58 48
+0x00007ffa88dad3a9:   85 d2 74 04 48 89 42 10 49 8d 44 24 40 48 39 86
+0x00007ffa88dad3b9:   88 00 00 00 74 49 48 8b 53 78 4c 89 e1 e8 35 e7
+0x00007ffa88dad3c9:   fe ff 83 6b 60 01 48 83 c4 28 5b 5e 5f 41 5c c3
+0x00007ffa88dad3d9:   0f 1f 80 00 00 00 00 48 8b 01 48 8d 15 f6 ac 01
+0x00007ffa88dad3e9:   00 48 8b 40 18 48 39 d0 0f 84 3b ff ff ff 4c 89
+0x00007ffa88dad3f9:   e2 ff d0 e9 31 ff ff ff 0f 1f 80 00 00 00 00 48 
+
+
+Stack slot to memory mapping:
+stack at sp + 0 slots: 0x000001e954d106a0 is a thread
+stack at sp + 1 slots: 0x0 is NULL
+stack at sp + 2 slots: 0x000001e954d106a0 is a thread
+stack at sp + 3 slots: 0x00007ffa207c88c0 jvm.dll
+stack at sp + 4 slots: 0x00007ffa20db0e98 jvm.dll
+stack at sp + 5 slots: 0x000000003f800000 is an unknown value
+stack at sp + 6 slots: 0x000001e948869990 points into unknown readable memory: 0x0000000000000008 | 08 00 00 00 00 00 00 00
+stack at sp + 7 slots: 0x00000000000004ea is an unknown value
+
+
+Compiled method (c1) 2971 1501       3       com.analiticasoft.hitraider.screens.GameplayScreen::render (218 bytes)
+ total in heap  [0x000001e95cae6810,0x000001e95cae80f0] = 6368
+ relocation     [0x000001e95cae6970,0x000001e95cae6ae8] = 376
+ constants      [0x000001e95cae6b00,0x000001e95cae6b20] = 32
+ main code      [0x000001e95cae6b20,0x000001e95cae7b00] = 4064
+ stub code      [0x000001e95cae7b00,0x000001e95cae7bc8] = 200
+ oops           [0x000001e95cae7bc8,0x000001e95cae7bd0] = 8
+ metadata       [0x000001e95cae7bd0,0x000001e95cae7c58] = 136
+ scopes data    [0x000001e95cae7c58,0x000001e95cae7df8] = 416
+ scopes pcs     [0x000001e95cae7df8,0x000001e95cae8078] = 640
+ dependencies   [0x000001e95cae8078,0x000001e95cae80a8] = 48
+ nul chk table  [0x000001e95cae80a8,0x000001e95cae80f0] = 72
+
+
+[Constant Pool]
+             Address          hex4                    hex8      
+  0x000001e95cae6b00:   0x3f6b851f      0x3f6e147b3f6b851f      
+  0x000001e95cae6b04:   0x3f6e147b                              
+  0x000001e95cae6b08:   0x3f733333      0x3f8000003f733333      
+  0x000001e95cae6b0c:   0x3f800000                              
+  0x000001e95cae6b10:   0xf4f4f4f4      0xf4f4f4f4f4f4f4f4      
+  0x000001e95cae6b14:   0xf4f4f4f4                              

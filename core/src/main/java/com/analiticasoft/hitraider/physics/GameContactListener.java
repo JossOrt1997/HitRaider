@@ -21,21 +21,19 @@ public class GameContactListener implements ContactListener {
         Fixture a = contact.getFixtureA();
         Fixture b = contact.getFixtureB();
 
+        // grounded
         if (isGroundSensor(a) && isGroundLike(b)) incGroundContacts(a);
         if (isGroundSensor(b) && isGroundLike(a)) incGroundContacts(b);
 
-        if (Hitbox.isHitboxFixture(a)) {
-            if (isGroundLike(b)) combat.notifyMeleeWorldHit();
-            combat.handleHitboxContact(a, b);
-        }
-        if (Hitbox.isHitboxFixture(b)) {
-            if (isGroundLike(a)) combat.notifyMeleeWorldHit();
-            combat.handleHitboxContact(b, a);
-        }
+        // melee hitboxes (only hit damageables; filter already prevents world/pickups)
+        if (Hitbox.isHitboxFixture(a)) combat.handleHitboxContact(a, b);
+        if (Hitbox.isHitboxFixture(b)) combat.handleHitboxContact(b, a);
 
+        // projectiles
         handleProjectileContact(a, b);
         handleProjectileContact(b, a);
 
+        // pickups
         handleRelicPickup(a, b);
         handleRelicPickup(b, a);
     }
@@ -51,6 +49,7 @@ public class GameContactListener implements ContactListener {
 
     @Override
     public void preSolve(Contact contact, Manifold oldManifold) {
+        // One-way platforms: player only
         Fixture a = contact.getFixtureA();
         Fixture b = contact.getFixtureB();
 
@@ -82,26 +81,25 @@ public class GameContactListener implements ContactListener {
 
         if (p.state == Projectile.State.IMPACT || p.hitLock > 0f || p.impactQueued) return;
 
-        Object oud = otherFix.getUserData();
-
-        // hit world
-        if ("ground".equals(oud) || "oneway".equals(oud)) {
+        // ✅ world hit via category bits (no string dependency)
+        if (isWorldFixture(otherFix)) {
             p.hitLock = 0.05f;
             projectiles.queueImpact(p);
             projectiles.notifyImpactWorld();
             return;
         }
 
+        Object oud = otherFix.getUserData();
         if (!(oud instanceof Damageable target)) return;
         if (target.getFaction() == p.faction) return;
 
         target.applyDamage(p.damage, new Vector2(0, 0));
         projectiles.notifyImpactEnemy();
 
-        // piercing logic
+        // piercing
         if (p.piercesLeft > 0) {
             p.piercesLeft--;
-            p.hitLock = 0.06f; // pequeño lock para evitar doble-hit instantáneo
+            p.hitLock = 0.06f;
             return;
         }
 
@@ -122,7 +120,9 @@ public class GameContactListener implements ContactListener {
         pickup.collected = true;
     }
 
-    private boolean isGroundSensor(Fixture f) { return f != null && "player_ground_sensor".equals(f.getUserData()); }
+    private boolean isGroundSensor(Fixture f) {
+        return f != null && "player_ground_sensor".equals(f.getUserData());
+    }
 
     private boolean isPlayerFixture(Fixture f) {
         if (f == null) return false;
@@ -133,6 +133,12 @@ public class GameContactListener implements ContactListener {
     private boolean isGround(Fixture f) { return f != null && "ground".equals(f.getUserData()); }
     private boolean isOneWay(Fixture f) { return f != null && "oneway".equals(f.getUserData()); }
     private boolean isGroundLike(Fixture f) { return isGround(f) || isOneWay(f); }
+
+    private boolean isWorldFixture(Fixture f) {
+        if (f == null) return false;
+        Filter flt = f.getFilterData();
+        return flt != null && flt.categoryBits == CollisionBits.WORLD;
+    }
 
     private void incGroundContacts(Fixture sensor) {
         Object ud = sensor.getBody().getUserData();

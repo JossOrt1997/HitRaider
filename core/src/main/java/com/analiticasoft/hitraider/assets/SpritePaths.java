@@ -3,7 +3,7 @@ package com.analiticasoft.hitraider.assets;
 public final class SpritePaths {
     private SpritePaths() {}
 
-    // Roots
+    // Roots (your runtime resolves "assets/sprites/..." => path starts with "sprites/")
     public static final String ROOT = "sprites/";
     public static final String PLAYER = ROOT + "player/salamander/";
     public static final String ENEMIES = ROOT + "enemies/";
@@ -14,7 +14,7 @@ public final class SpritePaths {
     // UI
     public static final String LEGION_SALAMANDERS = UI + "legions/salamanders.png";
 
-    // Backgrounds (2-layer)
+    // Backgrounds (forest/castle)
     public static final String FOREST_BASE = BG + "forest/forest_bg_base.png";
     public static final String FOREST_MID  = BG + "forest/forest_bg_mid.png";
     public static final String CASTLE_BASE = BG + "castle/castle_bg_base.png";
@@ -30,7 +30,7 @@ public final class SpritePaths {
     public static String pHurt(int i)   { return PLAYER + "hurt/hurt_" + f(i) + ".png"; }
     public static String pDead(int i)   { return PLAYER + "dead/dead_" + f(i) + ".png"; }
 
-    // Enemy melee (Eldar melee)
+    // Enemies
     public static final String ELDAR_MELEE = ENEMIES + "eldar_melee/";
     public static String emIdle(int i)      { return ELDAR_MELEE + "idle/idle_" + f(i) + ".png"; }
     public static String emRun(int i)       { return ELDAR_MELEE + "run/run_" + f(i) + ".png"; }
@@ -39,7 +39,6 @@ public final class SpritePaths {
     public static String emHurt(int i)      { return ELDAR_MELEE + "hurt/hurt_" + f(i) + ".png"; }
     public static String emDead(int i)      { return ELDAR_MELEE + "dead/dead_" + f(i) + ".png"; }
 
-    // Enemy ranged (Eldar ranged)
     public static final String ELDAR_RANGED = ENEMIES + "eldar_ranged/";
     public static String erIdle(int i)      { return ELDAR_RANGED + "idle/idle_" + f(i) + ".png"; }
     public static String erRun(int i)       { return ELDAR_RANGED + "run/run_" + f(i) + ".png"; }
@@ -48,7 +47,7 @@ public final class SpritePaths {
     public static String erHurt(int i)      { return ELDAR_RANGED + "hurt/hurt_" + f(i) + ".png"; }
     public static String erDead(int i)      { return ELDAR_RANGED + "dead/dead_" + f(i) + ".png"; }
 
-    // Weapons
+    // Weapons (optional)
     public static String wIcon(String weaponFolder) { return WEAPONS + weaponFolder + "/icon.png"; }
     public static String wIdle(String weaponFolder, int i)  { return WEAPONS + weaponFolder + "/idle/idle_" + f(i) + ".png"; }
     public static String wShoot(String weaponFolder, int i) { return WEAPONS + weaponFolder + "/shoot/shoot_" + f(i) + ".png"; }

@@ -2,14 +2,14 @@ package com.analiticasoft.hitraider.assets;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
-/** Player sprite configuration: ALL animations + scale/pivot centralized here. */
+/** Player sprite config + animations. */
 public class PlayerSprites {
 
-    // Your optimal values:
+    // Visual tuning
     public float scale = 0.30f;
     public float feetOffsetPx = 48f;
 
-    // fps per animation (adjust later)
+    // fps per animation
     public float fpsIdle = 6f;
     public float fpsRun = 10f;
     public float fpsJump = 1f;

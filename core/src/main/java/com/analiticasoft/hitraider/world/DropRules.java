@@ -5,23 +5,17 @@ import com.analiticasoft.hitraider.relics.RelicType;
 import java.util.Random;
 
 /**
- * Semana 6 demo-ready:
- * - Max 1 reliquia por sala
- * - Anti-repetición (reroll 1 vez)
- * - Pool de 2 reliquias (extensible)
+ * Centralized relic roll rules.
+ * Keep deterministic (pass Random with known seed).
  */
 public class DropRules {
 
-    private RelicType lastDrop = null;
-
     public RelicType rollRelic(Random rng) {
-        RelicType t = rng.nextBoolean() ? RelicType.BONUS_PROJECTILE_DAMAGE : RelicType.FIRE_RATE_UP;
+        // Simple weighted example (Phase A)
+        float r = rng.nextFloat();
 
-        if (lastDrop != null && t == lastDrop) {
-            t = (t == RelicType.BONUS_PROJECTILE_DAMAGE) ? RelicType.FIRE_RATE_UP : RelicType.BONUS_PROJECTILE_DAMAGE;
-        }
-
-        lastDrop = t;
-        return t;
+        if (r < 0.45f) return RelicType.BONUS_PROJECTILE_DAMAGE;
+        if (r < 0.75f) return RelicType.FIRE_RATE_UP;
+        return RelicType.MELEE_LIFESTEAL;
     }
 }

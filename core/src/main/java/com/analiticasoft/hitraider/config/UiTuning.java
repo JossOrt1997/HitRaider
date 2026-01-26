@@ -3,7 +3,7 @@ package com.analiticasoft.hitraider.config;
 public final class UiTuning {
     private UiTuning() {}
 
-    // Souls HUD
+    // Souls HUD base anchor (top-left)
     public static final float HUD_BASE_X = 14f;
     public static final float HUD_BASE_Y_OFFSET = 20f;
 

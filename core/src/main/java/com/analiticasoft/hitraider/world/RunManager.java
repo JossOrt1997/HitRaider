@@ -8,7 +8,7 @@ public class RunManager {
     public int totalRooms;
     public int index;
 
-    public Array<RoomInstance> rooms;
+    private Array<RoomInstance> rooms;
 
     public void start(long seed, int totalRooms, Array<RoomInstance> rooms) {
         this.seed = seed;
@@ -18,18 +18,24 @@ public class RunManager {
     }
 
     public RoomInstance current() {
+        if (rooms == null || rooms.size == 0) return null;
         return rooms.get(index);
     }
 
     public boolean hasNext() {
-        return index < totalRooms - 1;
+        return rooms != null && index + 1 < rooms.size;
     }
 
     public void next() {
-        if (hasNext()) index++;
+        if (!hasNext()) return;
+        index++;
     }
 
-    public boolean isLast() {
-        return index >= totalRooms - 1;
+    public void reset() {
+        index = 0;
+    }
+
+    public int size() {
+        return rooms == null ? 0 : rooms.size;
     }
 }

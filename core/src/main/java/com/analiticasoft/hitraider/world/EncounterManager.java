@@ -2,24 +2,23 @@ package com.analiticasoft.hitraider.world;
 
 public class EncounterManager {
 
-    public enum State { FIGHT, CLEAR }
-
-    private State state = State.FIGHT;
-    private float clearMessageTimer = 0f;
-
-    public void update(float delta, int enemiesAlive) {
-        if (state == State.FIGHT && enemiesAlive <= 0) {
-            state = State.CLEAR;
-            clearMessageTimer = 1.2f;
-        }
-        if (clearMessageTimer > 0f) clearMessageTimer = Math.max(0f, clearMessageTimer - delta);
+    public enum State {
+        FIGHT,
+        CLEAR
     }
 
-    public State getState() { return state; }
-    public boolean shouldShowClearMessage() { return clearMessageTimer > 0f; }
+    private State state = State.FIGHT;
 
     public void reset() {
         state = State.FIGHT;
-        clearMessageTimer = 0f;
+    }
+
+    public void update(float delta, int aliveEnemies) {
+        if (state == State.CLEAR) return;
+        if (aliveEnemies <= 0) state = State.CLEAR;
+    }
+
+    public State getState() {
+        return state;
     }
 }

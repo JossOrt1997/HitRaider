@@ -1,5 +1,6 @@
 package com.analiticasoft.hitraider.combat;
 
+import com.analiticasoft.hitraider.physics.CollisionBits;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
@@ -34,7 +35,7 @@ public class CombatSystem {
     private final List<ActiveHitbox> active = new ArrayList<>();
     private boolean hitThisFrame = false;
 
-    // ✅ Impact flags
+    // Impact flags
     private boolean playerHurtThisFrame = false;
     private boolean enemyHurtThisFrame = false;
     private boolean meleeWorldHitThisFrame = false;
@@ -70,17 +71,19 @@ public class CombatSystem {
         return v;
     }
 
-    /** ContactListener: melee hitbox tocó mundo */
+    /** If you ever decide to re-enable "hit world" for melee, call this. */
     public void notifyMeleeWorldHit() {
         meleeWorldHitThisFrame = true;
     }
 
+    /** Debug: active hitbox fixtures */
     public List<Fixture> getActiveHitboxFixtures() {
         List<Fixture> out = new ArrayList<>(active.size());
         for (ActiveHitbox ah : active) out.add(ah.fixture);
         return out;
     }
 
+    /** Call before destroying a body to avoid stale fixtures causing crashes. */
     public void purgeForBody(Body body) {
         if (body == null) return;
         Iterator<ActiveHitbox> it = active.iterator();
@@ -100,6 +103,7 @@ public class CombatSystem {
                                  int aimY,
                                  int damage) {
 
+        // Only one hitbox per owner body at a time
         for (ActiveHitbox ah : active) {
             if (ah.ownerBody == ownerBody) return;
         }
@@ -124,6 +128,10 @@ public class CombatSystem {
         FixtureDef fd = new FixtureDef();
         fd.shape = shape;
         fd.isSensor = true;
+
+        // ✅ Hitbox should only detect bodies (PLAYER/ENEMY), not world/pickups/sensors
+        fd.filter.categoryBits = CollisionBits.HITBOX;
+        fd.filter.maskBits = CollisionBits.MASK_HITBOX;
 
         Fixture fx = ownerBody.createFixture(fd);
 
@@ -166,7 +174,7 @@ public class CombatSystem {
         if (!(otherUD instanceof Damageable target)) return;
         if (!target.isAlive()) return;
 
-        // friendly fire off
+        // Friendly fire off
         if (target.getFaction() == hb.ownerFaction) return;
 
         if (!hb.canHit(target)) return;
@@ -186,7 +194,7 @@ public class CombatSystem {
             ownerBody.setLinearVelocity(ov.x - dir * ATTACKER_RECOIL_X, ov.y + ATTACKER_RECOIL_Y);
         }
 
-        // ✅ classify impact
+        // classify impact
         if (target.getFaction() == Faction.PLAYER) playerHurtThisFrame = true;
         if (target.getFaction() == Faction.ENEMY) enemyHurtThisFrame = true;
 

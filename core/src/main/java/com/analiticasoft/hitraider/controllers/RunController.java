@@ -17,21 +17,12 @@ import com.analiticasoft.hitraider.relics.RelicManager;
 import com.analiticasoft.hitraider.relics.RelicPickup;
 import com.analiticasoft.hitraider.relics.RelicType;
 import com.analiticasoft.hitraider.world.*;
-
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.utils.Array;
 
 import java.util.Random;
 
-/**
- * RunController (Fortified)
- *
- * Guarantees:
- * - No destroyBody() except HARD RESET in buildPhysicsIfNeeded(true)
- * - All transient bodies (enemies, pickups, projectiles) are queued into PhysicsDestroyQueue
- * - On room switch, old bodies are queued and (if possible) flushed immediately (world not locked)
- */
 public class RunController {
 
     public PhysicsWorld physics;
@@ -53,7 +44,6 @@ public class RunController {
     public final RelicManager relics = new RelicManager();
     public final Array<RelicPickup> pickups = new Array<>();
 
-    // Run system
     public final RunManager run = new RunManager();
     public final RoomTemplateRegistry templates = new RoomTemplateRegistry();
     public final RoomInstanceGenerator generator = new RoomInstanceGenerator();
@@ -65,10 +55,10 @@ public class RunController {
 
     public float shootCooldown = 0f;
 
+    private final Random rng = new Random();
+
     // Fortification
     private PhysicsDestroyQueue destroyQueue;
-
-    private final Random rng = new Random();
 
     public void setDestroyQueue(PhysicsDestroyQueue q) {
         this.destroyQueue = q;
@@ -103,8 +93,7 @@ public class RunController {
     }
 
     /**
-     * HARD RESET allowed: destroys ALL bodies in old world and disposes it.
-     * This is one of the only allowed places to call world.destroyBody directly.
+     * HARD RESET allowed: destroy bodies directly ONLY here.
      */
     public void buildPhysicsIfNeeded(boolean rebuildPhysics) {
         if (!rebuildPhysics) return;
@@ -139,7 +128,6 @@ public class RunController {
         combat = new CombatSystem(physics.world);
         projectiles = new ProjectileSystem(physics.world);
 
-        // Inject destroy queue
         if (destroyQueue != null) projectiles.setDestroyQueue(destroyQueue);
 
         contactListener = new GameContactListener(combat, projectiles);
@@ -150,35 +138,25 @@ public class RunController {
     }
 
     /**
-     * Queues and clears all transient bodies from the current room.
-     * Does NOT flush; caller may flush if world is not locked.
+     * Queue-destroy transient bodies from previous room (enemies, pickups, alive projectiles).
+     * Never calls destroyBody directly here.
      */
     private void queueDestroyTransients() {
         if (destroyQueue == null || physics == null) return;
 
-        // Enemies
         for (int i = meleeEnemies.size - 1; i >= 0; i--) {
             MeleeEnemy e = meleeEnemies.get(i);
-            if (e != null && e.body != null && e.body.getWorld() == physics.world) {
-                destroyQueue.queueBody(e.body);
-            }
+            if (e != null && e.body != null && e.body.getWorld() == physics.world) destroyQueue.queueBody(e.body);
         }
         for (int i = rangedEnemies.size - 1; i >= 0; i--) {
             RangedEnemy e = rangedEnemies.get(i);
-            if (e != null && e.body != null && e.body.getWorld() == physics.world) {
-                destroyQueue.queueBody(e.body);
-            }
+            if (e != null && e.body != null && e.body.getWorld() == physics.world) destroyQueue.queueBody(e.body);
         }
-
-        // Pickups
         for (int i = pickups.size - 1; i >= 0; i--) {
             RelicPickup p = pickups.get(i);
-            if (p != null && p.body != null && p.body.getWorld() == physics.world) {
-                destroyQueue.queueBody(p.body);
-            }
+            if (p != null && p.body != null && p.body.getWorld() == physics.world) destroyQueue.queueBody(p.body);
         }
 
-        // Projectiles still ALIVE have bodies
         if (projectiles != null) {
             for (int i = projectiles.projectiles.size - 1; i >= 0; i--) {
                 Projectile pr = projectiles.projectiles.get(i);
@@ -193,15 +171,12 @@ public class RunController {
     public void loadCurrentRoom(boolean rebuildPhysics) {
         buildPhysicsIfNeeded(rebuildPhysics);
 
-        // Queue-destroy previous room transients (prevents ghost bodies)
+        // Clean previous transients safely
         queueDestroyTransients();
-
-        // If we are outside step, we can flush right away safely
         if (destroyQueue != null && physics != null && !physics.world.isLocked()) {
             destroyQueue.flush(physics.world, combat);
         }
 
-        // Clear arrays
         meleeEnemies.clear();
         rangedEnemies.clear();
         meleeAnims.clear();
@@ -257,7 +232,6 @@ public class RunController {
         Random rr = new Random(room.seed ^ 0x1234ABCD);
         RelicType a = dropRules.rollRelic(rr);
         RelicType b = dropRules.rollRelic(rr);
-
         if (a == b) b = (a == RelicType.BONUS_PROJECTILE_DAMAGE) ? RelicType.FIRE_RATE_UP : RelicType.BONUS_PROJECTILE_DAMAGE;
 
         pickups.add(new RelicPickup(physics.world, a, 520f, 220f));
@@ -275,10 +249,6 @@ public class RunController {
         relicDroppedThisRoom = true;
     }
 
-    /**
-     * Pickups are collected via ContactListener; we process them here.
-     * IMPORTANT: destruction goes through destroyQueue.
-     */
     public void processPickupsChoiceAware() {
         for (int i = pickups.size - 1; i >= 0; i--) {
             RelicPickup p = pickups.get(i);

@@ -4,8 +4,8 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 
 /**
- * 2-layer parallax. If any texture is null, it just skips it.
- * Textures are expected to repeat horizontally.
+ * 2-layer parallax background.
+ * If any texture is null, it just skips it.
  */
 public class BackgroundParallax {
 

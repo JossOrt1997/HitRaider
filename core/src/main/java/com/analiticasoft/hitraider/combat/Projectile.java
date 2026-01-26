@@ -1,5 +1,6 @@
 package com.analiticasoft.hitraider.combat;
 
+import com.analiticasoft.hitraider.physics.CollisionBits;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.badlogic.gdx.physics.box2d.*;
 
@@ -27,7 +28,7 @@ public class Projectile {
     public float impactFxLeft = 0f;
     public boolean impactQueued = false;
 
-    // ✅ NEW: piercing
+    // piercing
     public int piercesLeft = 0;
 
     public Projectile(World world, Faction faction, int damage,
@@ -53,6 +54,10 @@ public class Projectile {
         FixtureDef fd = new FixtureDef();
         fd.shape = s;
         fd.isSensor = true;
+
+        // ✅ Projectile only hits WORLD + bodies, not pickups/sensors
+        fd.filter.categoryBits = CollisionBits.PROJECTILE;
+        fd.filter.maskBits = CollisionBits.MASK_PROJECTILE;
 
         Fixture fx = body.createFixture(fd);
         fx.setUserData(this);

@@ -1,5 +1,6 @@
 package com.analiticasoft.hitraider.relics;
 
+import com.analiticasoft.hitraider.physics.CollisionBits;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.badlogic.gdx.physics.box2d.*;
 
@@ -23,6 +24,10 @@ public class RelicPickup {
         FixtureDef fd = new FixtureDef();
         fd.shape = s;
         fd.isSensor = true;
+
+        // ✅ Pickup only detects PLAYER
+        fd.filter.categoryBits = CollisionBits.PICKUP;
+        fd.filter.maskBits = CollisionBits.MASK_PICKUP;
 
         Fixture fx = body.createFixture(fd);
         fx.setUserData(this);

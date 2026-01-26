@@ -3,27 +3,17 @@ package com.analiticasoft.hitraider.entities;
 import com.analiticasoft.hitraider.combat.Damageable;
 import com.analiticasoft.hitraider.combat.Faction;
 import com.analiticasoft.hitraider.combat.HealthComponent;
+import com.analiticasoft.hitraider.physics.CollisionBits;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.analiticasoft.hitraider.world.MeleeEnemyProfile;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
 import com.analiticasoft.hitraider.combat.EnemyProfiles;
 
-
-/**
- * Enemigo melee simple (Week 4):
- * - IDLE -> CHASE -> TELEGRAPH -> ATTACK -> COOLDOWN
- * - STAGGER cuando recibe stun
- *
- * IMPORTANTE: Incluye ambos constructores:
- *  - (World, xPx, yPx)  ✅ para compatibilidad
- *  - (World, xPx, yPx, boolean facingRight) ✅ para control explícito
- */
 public class MeleeEnemy implements Damageable {
 
-    public enum State {
-        IDLE, CHASE, TELEGRAPH, ATTACK, COOLDOWN, STAGGER, DEAD
-    }
+    public enum State { IDLE, CHASE, TELEGRAPH, ATTACK, COOLDOWN, STAGGER, DEAD }
+
     private EnemyProfiles.MeleeAIProfile profile;
     public final Body body;
     private final HealthComponent health = new HealthComponent(4);
@@ -38,7 +28,7 @@ public class MeleeEnemy implements Damageable {
     private int facingDir = 1;
 
     // AI tuning
-    private static final float CHASE_SPEED = 1.8f;          // m/s
+    private static final float CHASE_SPEED = 1.8f;
     private static final float AGGRO_RANGE_PX = 240f;
     private static final float ATTACK_RANGE_PX = 48f;
 
@@ -46,19 +36,16 @@ public class MeleeEnemy implements Damageable {
     private static final float ATTACK_TIME = 0.06f;
     private static final float COOLDOWN_TIME = 0.35f;
 
-    // Combat tuning
     private static final int DAMAGE = 1;
 
     private static final float INVULN_TIME = 0.12f;
     private static final float FLASH_TIME = 0.08f;
     private static final float STUN_TIME = 0.10f;
 
-    /** Constructor de compatibilidad (asume facingRight=true) */
     public MeleeEnemy(World world, float xPx, float yPx) {
         this(world, xPx, yPx, true);
     }
 
-    /** Constructor completo (controla hacia dónde mira al spawnear) */
     public MeleeEnemy(World world, float xPx, float yPx, boolean facingRight) {
         this.facingDir = facingRight ? 1 : -1;
         this.profile = EnemyProfiles.ELDER_BLADE;
@@ -82,28 +69,22 @@ public class MeleeEnemy implements Damageable {
         fd.friction = 0.4f;
         fd.restitution = 0.0f;
 
+        // ✅ Enemy collisions
+        fd.filter.categoryBits = CollisionBits.ENEMY;
+        fd.filter.maskBits = CollisionBits.MASK_ENEMY_BODY;
+
         Fixture fx = body.createFixture(fd);
-        fx.setUserData(this); // IMPORTANT: Damageable
+        fx.setUserData(this);
 
         shape.dispose();
     }
 
     public MeleeEnemy(World world, float xPx, float yPx, MeleeEnemyProfile profile) {
-        this(
-            world,
-            xPx,
-            yPx,
-            profile.facingRight
-        );
-
-        // Aquí puedes extender después:
-        // this.health.setMaxHp(profile.hp);
-        // this.damage = profile.damage;
-        // this.speed = profile.speed;
+        this(world, xPx, yPx, profile.facingRight);
     }
 
     public MeleeEnemy(World world, float xPx, float yPx, EnemyProfiles.MeleeAIProfile profile) {
-        this(world, xPx, yPx, true); // facing inicial (se corrige en update mirando al player)
+        this(world, xPx, yPx, true);
         this.profile = profile;
     }
 
@@ -118,7 +99,6 @@ public class MeleeEnemy implements Damageable {
             return;
         }
 
-        // STAGGER: si está stunned, se queda quieto e interrumpe acciones
         if (health.isStunned()) {
             state = State.STAGGER;
             Vector2 v = body.getLinearVelocity();
@@ -131,7 +111,6 @@ public class MeleeEnemy implements Damageable {
         float dxPx = player.getXpx() - getXpx();
         float distPx = Math.abs(dxPx);
 
-        // Facing según jugador
         if (dxPx < -1f) facingDir = -1;
         else if (dxPx > 1f) facingDir = 1;
 
@@ -141,10 +120,7 @@ public class MeleeEnemy implements Damageable {
                 if (distPx <= AGGRO_RANGE_PX) state = State.CHASE;
             }
             case CHASE -> {
-                if (distPx > AGGRO_RANGE_PX) {
-                    state = State.IDLE;
-                    break;
-                }
+                if (distPx > AGGRO_RANGE_PX) { state = State.IDLE; break; }
                 if (distPx <= ATTACK_RANGE_PX) {
                     state = State.TELEGRAPH;
                     telegraphTimer = TELEGRAPH_TIME;
@@ -157,7 +133,6 @@ public class MeleeEnemy implements Damageable {
             case TELEGRAPH -> {
                 telegraphTimer -= delta;
                 body.setLinearVelocity(0f, body.getLinearVelocity().y);
-
                 if (telegraphTimer <= 0f) {
                     state = State.ATTACK;
                     attackTimer = ATTACK_TIME;
@@ -177,18 +152,13 @@ public class MeleeEnemy implements Damageable {
                 body.setLinearVelocity(0f, body.getLinearVelocity().y);
                 if (cooldownTimer <= 0f) state = State.CHASE;
             }
-            case STAGGER, DEAD -> {
-                // handled above / no-op
-            }
+            case STAGGER, DEAD -> {}
         }
     }
 
     public boolean didStartAttackThisFrame() { return attackStartedThisFrame; }
-
     public int getFacingDir() { return facingDir; }
-
     public int getDamage() { return DAMAGE; }
-
     public State getState() { return state; }
 
     public float getTelegraphAlpha() {
@@ -200,7 +170,6 @@ public class MeleeEnemy implements Damageable {
     public float getXpx() { return PhysicsConstants.toPixels(body.getPosition().x); }
     public float getYpx() { return PhysicsConstants.toPixels(body.getPosition().y); }
 
-    // ---- Damageable ----
     @Override public Faction getFaction() { return Faction.ENEMY; }
     @Override public boolean isAlive() { return health.isAlive(); }
     @Override public HealthComponent getHealth() { return health; }

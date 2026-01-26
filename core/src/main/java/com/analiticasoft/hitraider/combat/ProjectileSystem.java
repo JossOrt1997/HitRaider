@@ -4,6 +4,11 @@ import com.analiticasoft.hitraider.physics.PhysicsDestroyQueue;
 import com.badlogic.gdx.physics.box2d.World;
 import com.badlogic.gdx.utils.Array;
 
+/**
+ * ProjectileSystem (fortified):
+ * - Never destroys bodies directly if destroyQueue is provided
+ * - flushImpacts() must be called after physics.step()
+ */
 public class ProjectileSystem {
 
     private final World world;
@@ -12,7 +17,7 @@ public class ProjectileSystem {
     private int impactsEnemyThisFrame = 0;
     private int impactsWorldThisFrame = 0;
 
-    private PhysicsDestroyQueue destroyQueue; // optional
+    private PhysicsDestroyQueue destroyQueue; // optional but recommended
 
     public ProjectileSystem(World world) {
         this.world = world;
@@ -36,7 +41,7 @@ public class ProjectileSystem {
     public int consumeImpactsEnemy() { int v = impactsEnemyThisFrame; impactsEnemyThisFrame = 0; return v; }
     public int consumeImpactsWorld() { int v = impactsWorldThisFrame; impactsWorldThisFrame = 0; return v; }
 
-    /** Debe llamarse DESPUÉS de physics.step(delta). */
+    /** Call AFTER physics.step(delta) */
     public void flushImpacts() {
         for (Projectile p : projectiles) {
             if (p.state == Projectile.State.ALIVE && p.impactQueued) {
@@ -44,9 +49,8 @@ public class ProjectileSystem {
                     p.lastXpx = com.analiticasoft.hitraider.physics.PhysicsConstants.toPixels(p.body.getPosition().x);
                     p.lastYpx = com.analiticasoft.hitraider.physics.PhysicsConstants.toPixels(p.body.getPosition().y);
 
-                    if (destroyQueue != null)
-
-                        destroyQueue.queueBody(p.body);
+                    if (destroyQueue != null) destroyQueue.queueBody(p.body);
+                    else world.destroyBody(p.body);
                 }
                 p.beginImpactFx();
                 p.impactQueued = false;

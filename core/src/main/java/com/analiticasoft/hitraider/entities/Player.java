@@ -5,6 +5,7 @@ import com.analiticasoft.hitraider.combat.Faction;
 import com.analiticasoft.hitraider.combat.HealthComponent;
 import com.analiticasoft.hitraider.input.Action;
 import com.analiticasoft.hitraider.input.InputState;
+import com.analiticasoft.hitraider.physics.CollisionBits;
 import com.analiticasoft.hitraider.physics.GameContactListener;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.badlogic.gdx.math.Vector2;
@@ -45,8 +46,6 @@ public class Player implements Damageable {
     private static final float ATK_RECOVER = 0.14f;
     private static final float ATK_COOLDOWN = 0.10f;
 
-    // Cancel windows
-    // - Dash can cancel during RECOVERY (y también HURT si quieres)
     private static final boolean DASH_CANCEL_RECOVERY = true;
 
     // Hurt
@@ -102,6 +101,10 @@ public class Player implements Damageable {
         boxFd.friction = 0.0f;
         boxFd.restitution = 0.0f;
 
+        // ✅ Player body collisions
+        boxFd.filter.categoryBits = CollisionBits.PLAYER;
+        boxFd.filter.maskBits = CollisionBits.MASK_PLAYER_BODY;
+
         Fixture main = body.createFixture(boxFd);
         main.setUserData(this);
         box.dispose();
@@ -109,11 +112,17 @@ public class Player implements Damageable {
         CircleShape top = new CircleShape();
         top.setRadius(radius);
         top.setPosition(new Vector2(0, boxHalfH));
+
         FixtureDef topFd = new FixtureDef();
         topFd.shape = top;
         topFd.density = 1.0f;
         topFd.friction = 0.0f;
         topFd.restitution = 0.0f;
+
+        // ✅ Player body collisions
+        topFd.filter.categoryBits = CollisionBits.PLAYER;
+        topFd.filter.maskBits = CollisionBits.MASK_PLAYER_BODY;
+
         Fixture topFix = body.createFixture(topFd);
         topFix.setUserData(this);
         top.dispose();
@@ -121,11 +130,17 @@ public class Player implements Damageable {
         CircleShape bottom = new CircleShape();
         bottom.setRadius(radius);
         bottom.setPosition(new Vector2(0, -boxHalfH));
+
         FixtureDef bottomFd = new FixtureDef();
         bottomFd.shape = bottom;
         bottomFd.density = 1.0f;
         bottomFd.friction = 0.0f;
         bottomFd.restitution = 0.0f;
+
+        // ✅ Player body collisions
+        bottomFd.filter.categoryBits = CollisionBits.PLAYER;
+        bottomFd.filter.maskBits = CollisionBits.MASK_PLAYER_BODY;
+
         Fixture bottomFix = body.createFixture(bottomFd);
         bottomFix.setUserData(this);
         bottom.dispose();
@@ -138,9 +153,15 @@ public class Player implements Damageable {
             new Vector2(0, -halfH),
             0f
         );
+
         FixtureDef sfd = new FixtureDef();
         sfd.shape = sensorShape;
         sfd.isSensor = true;
+
+        // ✅ Sensor only detects WORLD
+        sfd.filter.categoryBits = CollisionBits.SENSOR;
+        sfd.filter.maskBits = CollisionBits.WORLD;
+
         Fixture sensor = body.createFixture(sfd);
         sensor.setUserData("player_ground_sensor");
         sensorShape.dispose();
@@ -184,14 +205,12 @@ public class Player implements Damageable {
 
         // ---- HURT lock ----
         if (state == State.HURT) {
-            // durante hurt, no control, pero sí gravedad/velocidad
             Vector2 v = body.getLinearVelocity();
             body.setLinearVelocity(0f, v.y);
 
             if (hurtTimer <= 0f && !health.isStunned()) {
                 state = State.IDLE;
             }
-            // aun así dejamos caer/saltar? no.
             return;
         }
 
@@ -202,7 +221,7 @@ public class Player implements Damageable {
             if (attackPhase == AttackPhase.STARTUP && attackPhaseTimer <= 0f) {
                 attackPhase = AttackPhase.ACTIVE;
                 attackPhaseTimer = ATK_ACTIVE;
-                attackHitboxSpawnThisFrame = true; // Spawn aquí: empieza active
+                attackHitboxSpawnThisFrame = true;
             } else if (attackPhase == AttackPhase.ACTIVE && attackPhaseTimer <= 0f) {
                 attackPhase = AttackPhase.RECOVERY;
                 attackPhaseTimer = ATK_RECOVER;
@@ -212,14 +231,13 @@ public class Player implements Damageable {
             }
         }
 
-        // ---- Input priority: DASH (cuando es posible) ----
+        // ---- DASH ----
         boolean wantsDash = input.isJustPressed(Action.DASH);
 
         boolean canDash = dashCooldownTimer <= 0f && dashTimer <= 0f;
         boolean canDashCancelAttack = DASH_CANCEL_RECOVERY && attackPhase == AttackPhase.RECOVERY;
 
         if (wantsDash && canDash && (attackPhase == AttackPhase.NONE || canDashCancelAttack)) {
-            // cancel recovery si aplica
             attackPhase = AttackPhase.NONE;
             state = State.DASH;
 
@@ -231,7 +249,7 @@ public class Player implements Damageable {
             return;
         }
 
-        // ---- Start ATTACK? ----
+        // ---- ATTACK start ----
         boolean wantsAttack = input.isJustPressed(Action.ATTACK);
         if (wantsAttack && attackPhase == AttackPhase.NONE && attackCooldownTimer <= 0f && dashTimer <= 0f) {
             state = State.ATTACK;
@@ -249,17 +267,14 @@ public class Player implements Damageable {
             state = State.IDLE;
         }
 
-        // ---- Movement lock during ATTACK startup/active/recovery ----
+        // ---- Movement lock during ATTACK ----
         boolean movementLocked = (attackPhase != AttackPhase.NONE);
 
         Vector2 v = body.getLinearVelocity();
-        if (movementLocked) {
-            body.setLinearVelocity(0f, v.y);
-        } else {
-            body.setLinearVelocity(mx * MOVE_SPEED_MPS, v.y);
-        }
+        if (movementLocked) body.setLinearVelocity(0f, v.y);
+        else body.setLinearVelocity(mx * MOVE_SPEED_MPS, v.y);
 
-        // ---- Jump execute (buffer + coyote) ----
+        // ---- Jump execute ----
         if (!movementLocked) {
             if (jumpBufferTimer > 0f && coyoteTimer > 0f) {
                 Vector2 now = body.getLinearVelocity();
@@ -269,7 +284,6 @@ public class Player implements Damageable {
                 wasJumpDown = true;
             }
 
-            // Variable jump cut
             boolean jumpDown = input.isDown(Action.JUMP);
             boolean releasedThisFrame = wasJumpDown && !jumpDown;
             wasJumpDown = jumpDown;
@@ -306,14 +320,12 @@ public class Player implements Damageable {
 
     public int getFacingDir() { return facingDir; }
 
-    /** -1 down, 0 neutral, +1 up */
     public int getAimY(InputState input) {
         if (input.isDown(Action.MOVE_UP)) return 1;
         if (input.isDown(Action.MOVE_DOWN)) return -1;
         return 0;
     }
 
-    /** true solo el frame en que entra a ACTIVE */
     public boolean shouldSpawnAttackHitboxThisFrame() {
         return attackHitboxSpawnThisFrame;
     }
@@ -323,7 +335,6 @@ public class Player implements Damageable {
 
     public boolean isFlashing() { return health.isFlashing(); }
 
-    // Damageable
     @Override public Faction getFaction() { return Faction.PLAYER; }
     @Override public boolean isAlive() { return health.isAlive(); }
     @Override public HealthComponent getHealth() { return health; }
@@ -333,7 +344,6 @@ public class Player implements Damageable {
         boolean applied = health.tryDamage(amount, INVULN_TIME, FLASH_TIME, STUN_TIME);
         if (!applied) return;
 
-        // Enter HURT (interrumpe ataque/dash)
         state = State.HURT;
         hurtTimer = HURT_LOCK_TIME;
 

@@ -1,5 +1,6 @@
 package com.analiticasoft.hitraider.world;
 
+import com.analiticasoft.hitraider.physics.CollisionBits;
 import com.analiticasoft.hitraider.physics.PhysicsConstants;
 import com.badlogic.gdx.physics.box2d.*;
 import com.badlogic.gdx.utils.Array;
@@ -17,11 +18,9 @@ public class LevelFactory {
     public static Array<PlatformRect> createTestLevel(World world) {
         Array<PlatformRect> rects = new Array<>();
 
-        // Piso grande
         createStaticBox(world, 0f, 48f, 10000f, 16f, "ground");
         rects.add(new PlatformRect(0f, 48f, 10000f, 16f, "ground"));
 
-        // Plataformas
         createStaticBox(world, 220f, 120f, 180f, 16f, "ground");
         rects.add(new PlatformRect(220f, 120f, 180f, 16f, "ground"));
 
@@ -31,11 +30,9 @@ public class LevelFactory {
         createStaticBox(world, 820f, 140f, 220f, 16f, "ground");
         rects.add(new PlatformRect(820f, 140f, 220f, 16f, "ground"));
 
-        // Pared
         createStaticBox(world, 1000f, 120f, 16f, 200f, "ground");
         rects.add(new PlatformRect(1000f, 120f, 16f, 200f, "ground"));
 
-        // One-way
         createStaticBox(world, 650f, 230f, 220f, 12f, "oneway");
         rects.add(new PlatformRect(650f, 230f, 220f, 12f, "oneway"));
 
@@ -66,6 +63,10 @@ public class LevelFactory {
         fd.shape = shape;
         fd.friction = 0.9f;
         fd.restitution = 0f;
+
+        // ✅ WORLD filter (solid surfaces)
+        fd.filter.categoryBits = CollisionBits.WORLD;
+        fd.filter.maskBits = CollisionBits.MASK_WORLD_SOLID;
 
         Fixture f = body.createFixture(fd);
         f.setUserData(userData);
