@@ -68,13 +68,13 @@ public class SpriteManager {
 
         // Tuning defaults
         player.scale = 0.30f;
-        player.feetOffsetPx = 48f;
+        player.feetOffsetPx = 18f;
 
         eldarMelee.scale = 0.28f;
-        eldarMelee.feetOffsetPx = 26f;
+        eldarMelee.feetOffsetPx = 18f;
 
         eldarRanged.scale = 0.28f;
-        eldarRanged.feetOffsetPx = 26f;
+        eldarRanged.feetOffsetPx = 18f;
     }
 
     private void loadFrames(AnimSet set, IntFunction<String> pathFn, int maxFrames) {
