@@ -4,13 +4,18 @@ import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
 public class EnemySprites {
 
-    public float scale = 0.28f;
+    public float scale = 0.16f;
     public float feetOffsetPx = 26f;
+
+    // Per-state offsets
+    public float offIdle = 0f, offRun = 0f, offTelegraph = 0f, offAttack = 0f, offHurt = 0f, offDead = 0f;
+    // Per-state scales (0 means use base scale)
+    public float scIdle = 0f, scRun = 0f, scTelegraph = 0f, scAttack = 0f, scHurt = 0f, scDead = 0f;
 
     public float fpsIdle = 6f;
     public float fpsRun = 10f;
     public float fpsTelegraph = 10f;
-    public float fpsAttack = 12f;
+    public float fpsAttack = 24f;
     public float fpsHurt = 12f;
     public float fpsDead = 6f;
 
@@ -82,5 +87,29 @@ public class EnemySprites {
     public void dispose() {
         idle.dispose(); run.dispose(); telegraph.dispose();
         attack.dispose(); hurt.dispose(); dead.dispose();
+    }
+
+    public float getOffset(State state) {
+        float off = switch (state) {
+            case RUN -> offRun;
+            case TELEGRAPH -> offTelegraph;
+            case ATTACK -> offAttack;
+            case HURT -> offHurt;
+            case DEAD -> offDead;
+            default -> offIdle;
+        };
+        return feetOffsetPx + off;
+    }
+
+    public float getScale(State state) {
+        float s = switch (state) {
+            case RUN -> scRun;
+            case TELEGRAPH -> scTelegraph;
+            case ATTACK -> scAttack;
+            case HURT -> scHurt;
+            case DEAD -> scDead;
+            default -> scIdle;
+        };
+        return (s > 0f) ? s : scale;
     }
 }

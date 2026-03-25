@@ -43,3 +43,4 @@ public class Lwjgl3Launcher {
         return configuration;
     }
 }
+

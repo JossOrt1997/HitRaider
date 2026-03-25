@@ -44,6 +44,7 @@ public class GameplayContext {
     // Deferred flags
     public boolean restartRequested = false;
     public boolean reloadRequested = false;
+    public boolean roomChanged = false;
 
     // Strict debug
     public boolean strictModeOn = false;

@@ -19,10 +19,13 @@ public class MeleeEnemy implements Damageable {
     private final HealthComponent health = new HealthComponent(4);
 
     private State state = State.IDLE;
+    private State previousState = State.IDLE;
 
     private float telegraphTimer = 0f;
     private float attackTimer = 0f;
+    private float attackDelayTimer = 0f;
     private float cooldownTimer = 0f;
+    private float deathTimer = com.analiticasoft.hitraider.config.VisualTuning.DEATH_PAUSE;
 
     private boolean attackStartedThisFrame = false;
     private int facingDir = 1;
@@ -32,9 +35,10 @@ public class MeleeEnemy implements Damageable {
     private static final float AGGRO_RANGE_PX = 240f;
     private static final float ATTACK_RANGE_PX = 48f;
 
-    private static final float TELEGRAPH_TIME = 0.18f;
-    private static final float ATTACK_TIME = 0.06f;
-    private static final float COOLDOWN_TIME = 0.35f;
+    private static final float TELEGRAPH_TIME = 0.45f;
+    private static final float ATTACK_TIME = 1.5f;
+    private static final float ATTACK_DELAY = 0.50f; // El golpe ocurre a los 0.5s de la animación
+    private static final float COOLDOWN_TIME = 0.60f;
 
     private static final int DAMAGE = 1;
 
@@ -61,7 +65,7 @@ public class MeleeEnemy implements Damageable {
         body = world.createBody(bd);
 
         PolygonShape shape = new PolygonShape();
-        shape.setAsBox(PhysicsConstants.toMeters(10f), PhysicsConstants.toMeters(14f));
+        shape.setAsBox(PhysicsConstants.toMeters(22f), PhysicsConstants.toMeters(26f));
 
         FixtureDef fd = new FixtureDef();
         fd.shape = shape;
@@ -94,6 +98,7 @@ public class MeleeEnemy implements Damageable {
         health.update(delta);
         if (!health.isAlive()) {
             state = State.DEAD;
+            deathTimer -= delta;
             Vector2 v = body.getLinearVelocity();
             body.setLinearVelocity(0f, v.y);
             return;
@@ -136,12 +141,20 @@ public class MeleeEnemy implements Damageable {
                 if (telegraphTimer <= 0f) {
                     state = State.ATTACK;
                     attackTimer = ATTACK_TIME;
-                    attackStartedThisFrame = true;
+                    attackDelayTimer = ATTACK_DELAY;
                 }
             }
             case ATTACK -> {
                 attackTimer -= delta;
                 body.setLinearVelocity(0f, body.getLinearVelocity().y);
+
+                if (attackDelayTimer > 0f) {
+                    attackDelayTimer -= delta;
+                    if (attackDelayTimer <= 0f) {
+                        attackStartedThisFrame = true;
+                    }
+                }
+
                 if (attackTimer <= 0f) {
                     state = State.COOLDOWN;
                     cooldownTimer = COOLDOWN_TIME;
@@ -161,6 +174,14 @@ public class MeleeEnemy implements Damageable {
     public int getDamage() { return DAMAGE; }
     public State getState() { return state; }
 
+    public boolean hasStateChanged() {
+        if (state != previousState) {
+            previousState = state;
+            return true;
+        }
+        return false;
+    }
+
     public float getTelegraphAlpha() {
         if (state != State.TELEGRAPH) return 0f;
         float t = Math.max(0f, telegraphTimer) / TELEGRAPH_TIME;
@@ -173,6 +194,10 @@ public class MeleeEnemy implements Damageable {
     @Override public Faction getFaction() { return Faction.ENEMY; }
     @Override public boolean isAlive() { return health.isAlive(); }
     @Override public HealthComponent getHealth() { return health; }
+
+    public boolean shouldBeRemoved() {
+        return !health.isAlive() && deathTimer <= 0f;
+    }
 
     @Override
     public void applyDamage(int amount, Vector2 knockback) {

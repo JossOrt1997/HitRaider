@@ -76,9 +76,10 @@ public class WorldRenderSystem {
 
             if (frame != null) {
                 float ex = e.getXpx();
-                float footY = e.getYpx() - meleeS.feetOffsetPx;
-                float w = frame.getRegionWidth() * meleeS.scale;
-                float h = frame.getRegionHeight() * meleeS.scale;
+                float footY = e.getYpx() - meleeS.getOffset(st);
+                float sc = meleeS.getScale(st);
+                float w = frame.getRegionWidth() * sc;
+                float h = frame.getRegionHeight() * sc;
 
                 boolean flip = e.getFacingDir() < 0;
                 if (frame.isFlipX() != flip) frame.flip(true, false);
@@ -96,9 +97,10 @@ public class WorldRenderSystem {
 
             if (frame != null) {
                 float ex = e.getXpx();
-                float footY = e.getYpx() - rangedS.feetOffsetPx;
-                float w = frame.getRegionWidth() * rangedS.scale;
-                float h = frame.getRegionHeight() * rangedS.scale;
+                float footY = e.getYpx() - rangedS.getOffset(st);
+                float sc = rangedS.getScale(st);
+                float w = frame.getRegionWidth() * sc;
+                float h = frame.getRegionHeight() * sc;
 
                 boolean flip = e.getFacingDir() < 0;
                 float drawX = flip ? ex + w / 2f : ex - w / 2f;
@@ -115,9 +117,10 @@ public class WorldRenderSystem {
 
         if (pFrame != null) {
             float px = ctx.run.player.getXpx();
-            float footY = ctx.run.player.getYpx() - ps.feetOffsetPx;
-            float w = pFrame.getRegionWidth() * ps.scale;
-            float h = pFrame.getRegionHeight() * ps.scale;
+            float footY = ctx.run.player.getYpx() - ps.getOffset(ctx.playerVisualState);
+            float sc = ps.getScale(ctx.playerVisualState);
+            float w = pFrame.getRegionWidth() * sc;
+            float h = pFrame.getRegionHeight() * sc;
 
             boolean flip = ctx.run.player.getFacingDir() < 0;
             float drawX = flip ? px + w / 2f : px - w / 2f;

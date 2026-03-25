@@ -49,7 +49,7 @@ public class Projectile {
         body = world.createBody(bd);
 
         CircleShape s = new CircleShape();
-        s.setRadius(PhysicsConstants.toMeters(3f));
+        s.setRadius(PhysicsConstants.toMeters(4.5f)); // +50% of 3f
 
         FixtureDef fd = new FixtureDef();
         fd.shape = s;

@@ -68,23 +68,24 @@ public class RunController {
     public void buildTemplates() {
         templates.clear();
 
-        RoomTemplate arena = new RoomTemplate("arena", 120f, 140f, 1120f)
-            .addSpawn(520f, 220f).addSpawn(650f, 220f).addSpawn(820f, 220f).addSpawn(950f, 220f).addSpawn(1040f, 220f);
+        // New long rooms (2000px)
+        RoomTemplate longArena = new RoomTemplate("arena_long", 120f, 140f, 1950f)
+            .addSpawn(400f, 100f).addSpawn(600f, 100f).addSpawn(800f, 100f)
+            .addSpawn(1100f, 220f).addSpawn(1300f, 100f).addSpawn(1500f, 100f)
+            .addSpawn(1700f, 230f).addSpawn(1850f, 100f);
 
-        RoomTemplate platforms = new RoomTemplate("platforms", 120f, 140f, 1120f)
-            .addSpawn(520f, 260f).addSpawn(650f, 260f).addSpawn(820f, 220f).addSpawn(950f, 220f).addSpawn(1040f, 220f);
+        RoomTemplate platformClimb = new RoomTemplate("platform_climb", 120f, 140f, 1950f)
+            .addSpawn(300f, 160f).addSpawn(520f, 220f).addSpawn(820f, 180f)
+            .addSpawn(1100f, 220f).addSpawn(1400f, 170f).addSpawn(1700f, 230f)
+            .addSpawn(1900f, 100f);
 
-        RoomTemplate hall = new RoomTemplate("hall", 120f, 140f, 1120f)
-            .addSpawn(520f, 220f).addSpawn(650f, 220f).addSpawn(760f, 220f).addSpawn(880f, 220f).addSpawn(1000f, 220f);
-
-        templates.add(arena);
-        templates.add(platforms);
-        templates.add(hall);
+        templates.add(longArena);
+        templates.add(platformClimb);
     }
 
     public void startNewRun(boolean rebuildPhysics) {
         long seed = System.currentTimeMillis();
-        int totalRooms = 12;
+        int totalRooms = 2;
 
         runRooms = generator.generate(seed, totalRooms, templates);
         run.start(seed, totalRooms, runRooms);

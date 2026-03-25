@@ -25,21 +25,16 @@ public class RoomInstanceGenerator {
 
             RoomTemplate tpl = templates.get(rng.nextInt(Math.max(1, templates.size())));
 
-            // Budget ramp
-            int budget = 2 + i / 2;
+            // Increased budget for 2 long rooms
+            int budget = 6 + i * 4;
 
             // Enemy counts from budget
             int melee = 0;
             int ranged = 0;
 
             if (type == RoomType.COMBAT) {
-                // simple split
-                melee = Math.max(1, budget / 2);
-                ranged = Math.max(0, budget - melee - 1);
-
-                // clamp
-                if (melee < 0) melee = 0;
-                if (ranged < 0) ranged = 0;
+                melee = budget / 2;
+                ranged = budget - melee;
             }
 
             float dropChance = 0.25f + Math.min(0.25f, i * 0.02f);

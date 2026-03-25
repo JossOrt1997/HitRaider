@@ -1,11 +1,14 @@
 package com.analiticasoft.hitraider.game;
 
+import com.analiticasoft.hitraider.assets.SpritePaths;
 import com.analiticasoft.hitraider.diagnostics.CrashReporter;
 import com.analiticasoft.hitraider.diagnostics.CrashContext;
 import com.analiticasoft.hitraider.diagnostics.ErrorGuard;
 import com.analiticasoft.hitraider.screens.GameplayScreen;
+import com.analiticasoft.hitraider.screens.MenuScreen;
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.Music;
 
 import java.io.File;
 import java.util.ArrayDeque;
@@ -14,6 +17,8 @@ import java.util.Deque;
 public class HitRaiderGame extends Game {
 
     private ErrorGuard errorGuard;
+    private boolean musicMuted = false;
+    private Music mainTheme;
 
     // Simple main-thread task queue
     private final Deque<Runnable> mainThreadQueue = new ArrayDeque<>();
@@ -32,7 +37,17 @@ public class HitRaiderGame extends Game {
 
         errorGuard.installGlobal();
 
-        restartToGameplay();
+        // ✅ Music setup
+        try {
+            mainTheme = Gdx.audio.newMusic(Gdx.files.internal(SpritePaths.MUSIC_OST));
+            mainTheme.setLooping(true);
+            mainTheme.setVolume(0.5f);
+            if (!musicMuted) mainTheme.play();
+        } catch (Exception e) {
+            Gdx.app.error("AUDIO", "Could not load music: " + e.getMessage());
+        }
+
+        setScreen(new MenuScreen(this));
     }
 
     @Override
@@ -51,6 +66,22 @@ public class HitRaiderGame extends Game {
         setScreen(new GameplayScreen());
     }
 
+    public boolean isMusicMuted() {
+        return musicMuted;
+    }
+
+    public void setMusicMuted(boolean muted) {
+        this.musicMuted = muted;
+        if (mainTheme != null) {
+            if (muted) mainTheme.pause();
+            else mainTheme.play();
+        }
+    }
+
+    public void toggleMusic() {
+        setMusicMuted(!musicMuted);
+    }
+
     public void postToMainThread(Runnable r) {
         mainThreadQueue.addLast(r);
     }
@@ -63,5 +94,6 @@ public class HitRaiderGame extends Game {
     @Override
     public void dispose() {
         if (getScreen() != null) getScreen().dispose();
+        if (mainTheme != null) mainTheme.dispose();
     }
 }

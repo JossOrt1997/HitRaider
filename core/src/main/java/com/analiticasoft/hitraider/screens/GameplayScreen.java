@@ -4,6 +4,7 @@ import com.analiticasoft.hitraider.combat.weapons.WeaponRuntime;
 import com.analiticasoft.hitraider.combat.weapons.WeaponType;
 import com.analiticasoft.hitraider.config.GameConfig;
 import com.analiticasoft.hitraider.config.ParallaxTuning;
+import com.analiticasoft.hitraider.game.HitRaiderGame;
 import com.analiticasoft.hitraider.gameplay.GameplayContext;
 import com.analiticasoft.hitraider.gameplay.GameplayRuntime;
 import com.analiticasoft.hitraider.gameplay.render.UiRenderSystem;
@@ -18,6 +19,7 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -45,11 +47,11 @@ public class GameplayScreen implements Screen {
 
     // HUD toggles
     private boolean hudEssentialOn = true;
-    private boolean hudInfoOn = true;
+    private boolean hudInfoOn = false;
 
     // Debug toggles
-    private boolean debugHitboxes = true;
-    private boolean debugHurtboxes = true;
+    private boolean debugHitboxes = false;
+    private boolean debugHurtboxes = false;
 
     // Weapon HUD runtime (Phase A)
     private WeaponType currentWeapon = WeaponType.THUNDER_HAMMER;
@@ -140,6 +142,14 @@ public class GameplayScreen implements Screen {
             Gdx.app.log("SNAPSHOT", buildSnapshotString("manual"));
         }
 
+        // Back to menu
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            Gdx.app.getApplicationListener().render(); // Force a render before switching if needed? No, just switch.
+            if (Gdx.app.getApplicationListener() instanceof HitRaiderGame) {
+                ((HitRaiderGame) Gdx.app.getApplicationListener()).setScreen(new MenuScreen((HitRaiderGame) Gdx.app.getApplicationListener()));
+            }
+        }
+
         // Weapon switching
         if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) currentWeapon = WeaponType.THUNDER_HAMMER;
         if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) currentWeapon = WeaponType.BOLTER;
@@ -163,9 +173,10 @@ public class GameplayScreen implements Screen {
         handleWeaponUse(delta);
 
         // If runtime processed reload this frame, rebuild background safely once
-        if (backgroundRebuildPending && !ctx.reloadRequested) {
+        if ((backgroundRebuildPending && !ctx.reloadRequested) || ctx.roomChanged) {
             rebuildBackground();
             backgroundRebuildPending = false;
+            ctx.roomChanged = false;
         }
 
         // Clear
@@ -254,9 +265,20 @@ public class GameplayScreen implements Screen {
     }
 
     private void rebuildBackground() {
+        int roomIndex = ctx.run.run.index;
+        Texture base, mid;
+
+        if (roomIndex == 0) {
+            base = ctx.sprites.forestBase();
+            mid = ctx.sprites.forestMid();
+        } else {
+            base = ctx.sprites.castleBase();
+            mid = ctx.sprites.castleMid();
+        }
+
         ctx.background = new BackgroundParallax(
-            ctx.sprites.forestBase(),
-            ctx.sprites.forestMid(),
+            base,
+            mid,
             ParallaxTuning.BASE_FACTOR,
             ParallaxTuning.MID_FACTOR,
             GameConfig.VIRTUAL_H

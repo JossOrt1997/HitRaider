@@ -7,7 +7,12 @@ public class PlayerSprites {
 
     // Visual tuning
     public float scale = 0.30f;
-    public float feetOffsetPx = 48f;
+    public float feetOffsetPx = 26f;
+
+    // Per-state offsets
+    public float offIdle = 0f, offRun = 0f, offJump = 0f, offFall = 0f, offDash = 0f, offAttack = 0f, offShoot = 0f, offHurt = 0f, offDead = 0f;
+    // Per-state scales (0 means use base scale)
+    public float scIdle = 0f, scRun = 0f, scJump = 0f, scFall = 0f, scDash = 0f, scAttack = 0f, scShoot = 0f, scHurt = 0f, scDead = 0f;
 
     // fps per animation
     public float fpsIdle = 6f;
@@ -15,7 +20,8 @@ public class PlayerSprites {
     public float fpsJump = 1f;
     public float fpsFall = 1f;
     public float fpsDash = 12f;
-    public float fpsAttack = 12f;
+    public float fpsAttack = 24f;
+    public float fpsShoot = 24f;
     public float fpsHurt = 12f;
     public float fpsDead = 6f;
 
@@ -25,10 +31,11 @@ public class PlayerSprites {
     public final AnimSet fall = new AnimSet();
     public final AnimSet dash = new AnimSet();
     public final AnimSet attack = new AnimSet();
+    public final AnimSet shoot = new AnimSet();
     public final AnimSet hurt = new AnimSet();
     public final AnimSet dead = new AnimSet();
 
-    public enum State { IDLE, RUN, JUMP, FALL, DASH, ATTACK, HURT, DEAD }
+    public enum State { IDLE, RUN, JUMP, FALL, DASH, ATTACK, SHOOT, HURT, DEAD }
 
     public TextureRegion get(State state, float timeSec) {
         AnimSet set = pickSet(state);
@@ -54,7 +61,7 @@ public class PlayerSprites {
     }
 
     public static boolean isOneShot(State s) {
-        return s == State.ATTACK || s == State.HURT || s == State.DEAD;
+        return s == State.ATTACK || s == State.SHOOT || s == State.HURT || s == State.DEAD;
     }
 
     private AnimSet pickSet(State state) {
@@ -64,6 +71,7 @@ public class PlayerSprites {
             case FALL -> fall;
             case DASH -> dash;
             case ATTACK -> attack;
+            case SHOOT -> shoot;
             case HURT -> hurt;
             case DEAD -> dead;
             default -> idle;
@@ -77,6 +85,7 @@ public class PlayerSprites {
             case FALL -> fpsFall;
             case DASH -> fpsDash;
             case ATTACK -> fpsAttack;
+            case SHOOT -> fpsShoot;
             case HURT -> fpsHurt;
             case DEAD -> fpsDead;
             default -> fpsIdle;
@@ -93,6 +102,36 @@ public class PlayerSprites {
 
     public void dispose() {
         idle.dispose(); run.dispose(); jump.dispose(); fall.dispose();
-        dash.dispose(); attack.dispose(); hurt.dispose(); dead.dispose();
+        dash.dispose(); attack.dispose(); shoot.dispose(); hurt.dispose(); dead.dispose();
+    }
+
+    public float getOffset(State state) {
+        float off = switch (state) {
+            case RUN -> offRun;
+            case JUMP -> offJump;
+            case FALL -> offFall;
+            case DASH -> offDash;
+            case ATTACK -> offAttack;
+            case SHOOT -> offShoot;
+            case HURT -> offHurt;
+            case DEAD -> offDead;
+            default -> offIdle;
+        };
+        return feetOffsetPx + off;
+    }
+
+    public float getScale(State state) {
+        float s = switch (state) {
+            case RUN -> scRun;
+            case JUMP -> scJump;
+            case FALL -> scFall;
+            case DASH -> scDash;
+            case ATTACK -> scAttack;
+            case SHOOT -> scShoot;
+            case HURT -> scHurt;
+            case DEAD -> scDead;
+            default -> scIdle;
+        };
+        return (s > 0f) ? s : scale;
     }
 }

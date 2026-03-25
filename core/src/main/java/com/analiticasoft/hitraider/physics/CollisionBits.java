@@ -16,7 +16,7 @@ public final class CollisionBits {
     // Include SENSOR so ground sensors can detect WORLD fixtures.
     public static final short MASK_WORLD_SOLID  = (short)(PLAYER | ENEMY | PROJECTILE | SENSOR);
 
-    public static final short MASK_PLAYER_BODY = (short)(WORLD | ENEMY | PROJECTILE);
+    public static final short MASK_PLAYER_BODY = (short)(WORLD | ENEMY | PROJECTILE | HITBOX | PICKUP);
     public static final short MASK_ENEMY_BODY  = (short)(WORLD | PLAYER | PROJECTILE | HITBOX);
 
     public static final short MASK_HITBOX      = (short)(PLAYER | ENEMY);

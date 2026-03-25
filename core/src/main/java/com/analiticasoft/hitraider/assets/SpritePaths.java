@@ -10,13 +10,24 @@ public final class SpritePaths {
     public static final String WEAPONS = ROOT + "weapons/";
     public static final String UI = ROOT + "ui/";
     public static final String BG = ROOT + "backgrounds/";
+    public static final String WORLD = ROOT + "world/";
 
     // UI
     public static final String LEGION_SALAMANDERS = UI + "legions/salamanders.png";
+    public static final String SCREEN_MENU = UI + "screens/menu_bg.png";
+    public static final String SCREEN_WIN = UI + "screens/win_bg.png";
+
+    // Music
+    public static final String MUSIC_OST = "music/ost/ost.mp3";
+
+    // World & Combat
+    public static final String BULLET = ROOT + "combat/bullet.png";
+    public static final String PLATFORM_GROUND = WORLD + "platform_ground.png";
+    public static final String PLATFORM_ONEWAY = WORLD + "platform_oneway.png";
 
     // Backgrounds (forest/castle)
-    public static final String FOREST_BASE = BG + "forest/forest_bg_base.png";
-    public static final String FOREST_MID  = BG + "forest/forest_bg_mid.png";
+    public static final String FOREST_BASE = BG + "forest_bg_base.png";
+    public static final String FOREST_MID  = BG + "forest_bg_base.png"; // Fallback to same file if mid is missing
     public static final String CASTLE_BASE = BG + "castle/castle_bg_base.png";
     public static final String CASTLE_MID  = BG + "castle/castle_bg_mid.png";
 
@@ -27,6 +38,7 @@ public final class SpritePaths {
     public static String pFall(int i)   { return PLAYER + "fall/fall_" + f(i) + ".png"; }
     public static String pDash(int i)   { return PLAYER + "dash/dash_" + f(i) + ".png"; }
     public static String pAttack(int i) { return PLAYER + "attack/attack_" + f(i) + ".png"; }
+    public static String pShoot(int i)  { return PLAYER + "shoot/shoot_" + f(i) + ".png"; }
     public static String pHurt(int i)   { return PLAYER + "hurt/hurt_" + f(i) + ".png"; }
     public static String pDead(int i)   { return PLAYER + "dead/dead_" + f(i) + ".png"; }
 

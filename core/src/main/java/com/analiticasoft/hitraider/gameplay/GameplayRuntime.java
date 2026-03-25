@@ -135,6 +135,7 @@ public class GameplayRuntime {
         ctx.shake.reset();
         ctx.hitstopTimer = 0f;
         ctx.meleeHitCounter = 0;
+        ctx.roomChanged = true; // ✅ Rebuild background on restart
 
         resetDoor(ctx);
 
@@ -156,8 +157,14 @@ public class GameplayRuntime {
         if (ctx.run.run.hasNext()) {
             ctx.run.run.next();
             ctx.run.loadCurrentRoom(false);
+            ctx.roomChanged = true;
         } else {
-            ctx.run.startNewRun(false);
+            // FINISH RUN: Go to WinScreen
+            if (Gdx.app.getApplicationListener() instanceof com.analiticasoft.hitraider.game.HitRaiderGame) {
+                com.analiticasoft.hitraider.game.HitRaiderGame game = (com.analiticasoft.hitraider.game.HitRaiderGame) Gdx.app.getApplicationListener();
+                game.postToMainThread(() -> game.setScreen(new com.analiticasoft.hitraider.screens.WinScreen(game)));
+            }
+            return;
         }
 
         ctx.run.setDestroyQueue(ctx.destroyQueue);
@@ -225,7 +232,7 @@ public class GameplayRuntime {
                 ctx.run.combat.spawnMeleeHitbox(e.body, e, e.getFaction(), e.getFacingDir(), 0, 1);
             }
 
-            if (!e.isAlive()) {
+            if (e.shouldBeRemoved()) {
                 ctx.run.combat.purgeForBody(e.body);
                 ctx.destroyQueue.queueBody(e.body);
 
@@ -254,7 +261,7 @@ public class GameplayRuntime {
                 ctx.run.projectiles.spawn(p);
             }
 
-            if (!re.isAlive()) {
+            if (re.shouldBeRemoved()) {
                 ctx.destroyQueue.queueBody(re.body);
 
                 ctx.run.rangedEnemies.removeIndex(i);
@@ -295,7 +302,7 @@ public class GameplayRuntime {
 
         RoomInstance room = ctx.run.run.current();
         if (!ctx.transition.isTransitioning() && ctx.run.canExit()) {
-            if (ctx.run.player.getXpx() > room.template.exitXpx + 20f) {
+            if (ctx.run.player.getXpx() > room.template.exitXpx - 10f) {
                 ctx.transition.startFadeOut();
             }
         }
@@ -310,8 +317,23 @@ public class GameplayRuntime {
             ctx.playerStateTime += dt;
         }
 
-        for (int i = 0; i < ctx.meleeAnimTimes.size; i++) ctx.meleeAnimTimes.set(i, ctx.meleeAnimTimes.get(i) + dt);
-        for (int i = 0; i < ctx.rangedAnimTimes.size; i++) ctx.rangedAnimTimes.set(i, ctx.rangedAnimTimes.get(i) + dt);
+        for (int i = 0; i < ctx.run.meleeEnemies.size; i++) {
+            MeleeEnemy e = ctx.run.meleeEnemies.get(i);
+            if (e.hasStateChanged()) {
+                if (i < ctx.meleeAnimTimes.size) ctx.meleeAnimTimes.set(i, 0f);
+            } else {
+                if (i < ctx.meleeAnimTimes.size) ctx.meleeAnimTimes.set(i, ctx.meleeAnimTimes.get(i) + dt);
+            }
+        }
+
+        for (int i = 0; i < ctx.run.rangedEnemies.size; i++) {
+            RangedEnemy e = ctx.run.rangedEnemies.get(i);
+            if (e.hasStateChanged()) {
+                if (i < ctx.rangedAnimTimes.size) ctx.rangedAnimTimes.set(i, 0f);
+            } else {
+                if (i < ctx.rangedAnimTimes.size) ctx.rangedAnimTimes.set(i, ctx.rangedAnimTimes.get(i) + dt);
+            }
+        }
     }
 
     public void syncEnemyTimers(GameplayContext ctx) {

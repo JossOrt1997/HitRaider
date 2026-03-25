@@ -16,9 +16,13 @@ public class RangedEnemy implements Damageable {
     private final HealthComponent health = new HealthComponent(3);
 
     private State state = State.IDLE;
+    private State previousState = State.IDLE;
 
     private float telegraphTimer = 0f;
+    private float shootTimer = 0f;
+    private float shootDelayTimer = 0f;
     private float cooldownTimer = 0f;
+    private float deathTimer = com.analiticasoft.hitraider.config.VisualTuning.DEATH_PAUSE;
 
     private boolean shotThisFrame = false;
     private int facingDir = 1;
@@ -26,8 +30,10 @@ public class RangedEnemy implements Damageable {
     private static final float AGGRO_RANGE_PX = 340f;
     private static final float KEEP_DISTANCE_PX = 160f;
     private static final float KITE_SPEED = 1.6f;
-    private static final float TELEGRAPH_TIME = 0.20f;
-    private static final float COOLDOWN_TIME = 0.55f;
+    private static final float TELEGRAPH_TIME = 0.50f;
+    private static final float SHOOT_TIME = 1.5f;
+    private static final float SHOOT_DELAY = 0.70f; // El disparo sale tras 0.7s de animación
+    private static final float COOLDOWN_TIME = 0.65f;
 
     private static final float INVULN_TIME = 0.12f;
     private static final float FLASH_TIME = 0.08f;
@@ -42,7 +48,7 @@ public class RangedEnemy implements Damageable {
         body = world.createBody(bd);
 
         PolygonShape shape = new PolygonShape();
-        shape.setAsBox(PhysicsConstants.toMeters(10f), PhysicsConstants.toMeters(14f));
+        shape.setAsBox(PhysicsConstants.toMeters(22f), PhysicsConstants.toMeters(26f));
 
         FixtureDef fd = new FixtureDef();
         fd.shape = shape;
@@ -66,6 +72,7 @@ public class RangedEnemy implements Damageable {
         health.update(delta);
         if (!health.isAlive()) {
             state = State.DEAD;
+            deathTimer -= delta;
             Vector2 v = body.getLinearVelocity();
             body.setLinearVelocity(0f, v.y);
             return;
@@ -108,12 +115,25 @@ public class RangedEnemy implements Damageable {
                 body.setLinearVelocity(0f, body.getLinearVelocity().y);
                 if (telegraphTimer <= 0f) {
                     state = State.SHOOT;
-                    shotThisFrame = true;
+                    shootTimer = SHOOT_TIME;
+                    shootDelayTimer = SHOOT_DELAY;
                 }
             }
             case SHOOT -> {
-                state = State.COOLDOWN;
-                cooldownTimer = COOLDOWN_TIME;
+                shootTimer -= delta;
+                body.setLinearVelocity(0f, body.getLinearVelocity().y);
+
+                if (shootDelayTimer > 0f) {
+                    shootDelayTimer -= delta;
+                    if (shootDelayTimer <= 0f) {
+                        shotThisFrame = true;
+                    }
+                }
+
+                if (shootTimer <= 0f) {
+                    state = State.COOLDOWN;
+                    cooldownTimer = COOLDOWN_TIME;
+                }
             }
             case COOLDOWN -> {
                 cooldownTimer -= delta;
@@ -128,6 +148,14 @@ public class RangedEnemy implements Damageable {
     public int getFacingDir() { return facingDir; }
     public State getState() { return state; }
 
+    public boolean hasStateChanged() {
+        if (state != previousState) {
+            previousState = state;
+            return true;
+        }
+        return false;
+    }
+
     public float getTelegraphAlpha() {
         if (state != State.TELEGRAPH) return 0f;
         float t = Math.max(0f, telegraphTimer) / TELEGRAPH_TIME;
@@ -140,6 +168,10 @@ public class RangedEnemy implements Damageable {
     @Override public Faction getFaction() { return Faction.ENEMY; }
     @Override public boolean isAlive() { return health.isAlive(); }
     @Override public HealthComponent getHealth() { return health; }
+
+    public boolean shouldBeRemoved() {
+        return !health.isAlive() && deathTimer <= 0f;
+    }
 
     @Override
     public void applyDamage(int amount, Vector2 knockback) {

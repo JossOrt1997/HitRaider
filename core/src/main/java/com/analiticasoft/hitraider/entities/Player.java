@@ -14,7 +14,7 @@ import com.badlogic.gdx.physics.box2d.*;
 public class Player implements Damageable {
 
     public enum State {
-        IDLE, RUN, JUMP, FALL, DASH, ATTACK, HURT, DEAD
+        IDLE, RUN, JUMP, FALL, DASH, ATTACK, SHOOT, HURT, DEAD
     }
 
     public final Body body;
@@ -41,9 +41,9 @@ public class Player implements Damageable {
     private static final float DASH_COOLDOWN = 0.25f;
 
     // ATTACK TIMING (feel)
-    private static final float ATK_STARTUP = 0.06f;
-    private static final float ATK_ACTIVE  = 0.10f;
-    private static final float ATK_RECOVER = 0.14f;
+    private static final float ATK_STARTUP = 0.75f; // Most of the animation sweep
+    private static final float ATK_ACTIVE  = 0.15f; // Brief hit at the end
+    private static final float ATK_RECOVER = 0.40f; // Follow-through
     private static final float ATK_COOLDOWN = 0.10f;
 
     private static final boolean DASH_CANCEL_RECOVERY = true;
@@ -75,6 +75,10 @@ public class Player implements Damageable {
     // Hurt timer
     private float hurtTimer = 0f;
 
+    // Shoot timer (visual only)
+    private float shootTimer = 0f;
+    private static final float SHOOT_ANIM_TIME = 0.25f;
+
     public Player(World world, float startXpx, float startYpx) {
         float x = PhysicsConstants.toMeters(startXpx);
         float y = PhysicsConstants.toMeters(startYpx);
@@ -87,9 +91,9 @@ public class Player implements Damageable {
         body = world.createBody(bd);
 
         // Capsule collider (box + 2 circles)
-        float halfW = PhysicsConstants.toMeters(10f);
-        float halfH = PhysicsConstants.toMeters(16f);
-        float radius = PhysicsConstants.toMeters(7f);
+        float halfW = PhysicsConstants.toMeters(22f); // Much wider for better connectivity
+        float halfH = PhysicsConstants.toMeters(26f); // Reverted to original height
+        float radius = PhysicsConstants.toMeters(18f); // Radius stays large for top/width, but we'll adjust positioning
 
         PolygonShape box = new PolygonShape();
         float boxHalfH = Math.max(halfH - radius, PhysicsConstants.toMeters(4f));
@@ -197,6 +201,7 @@ public class Player implements Damageable {
         if (attackCooldownTimer > 0f) attackCooldownTimer = Math.max(0f, attackCooldownTimer - delta);
 
         if (hurtTimer > 0f) hurtTimer = Math.max(0f, hurtTimer - delta);
+        if (shootTimer > 0f) shootTimer = Math.max(0f, shootTimer - delta);
 
         // Facing dir
         float mx = input.getMoveX();
@@ -267,7 +272,13 @@ public class Player implements Damageable {
             state = State.IDLE;
         }
 
+        // ---- SHOOT (visual only, doesn't lock movement) ----
+        if (input.isJustPressed(Action.SHOOT) && attackPhase == AttackPhase.NONE && state != State.DASH) {
+            shootTimer = SHOOT_ANIM_TIME;
+        }
+
         // ---- Movement lock during ATTACK ----
+
         boolean movementLocked = (attackPhase != AttackPhase.NONE);
 
         Vector2 v = body.getLinearVelocity();
@@ -306,6 +317,11 @@ public class Player implements Damageable {
         if (attackPhase != AttackPhase.NONE) return;
         if (state == State.HURT) return;
         if (state == State.DEAD) return;
+
+        if (shootTimer > 0f) {
+            state = State.SHOOT;
+            return;
+        }
 
         if (!isGrounded()) {
             state = (v.y > 0.2f) ? State.JUMP : State.FALL;

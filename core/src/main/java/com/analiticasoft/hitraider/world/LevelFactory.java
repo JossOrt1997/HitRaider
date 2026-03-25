@@ -18,23 +18,38 @@ public class LevelFactory {
     public static Array<PlatformRect> createTestLevel(World world) {
         Array<PlatformRect> rects = new Array<>();
 
-        createStaticBox(world, 0f, 48f, 10000f, 16f, "ground");
-        rects.add(new PlatformRect(0f, 48f, 10000f, 16f, "ground"));
+        // Main floor
+        createStaticBox(world, 0f, 48f, 20000f, 16f, "ground");
+        rects.add(new PlatformRect(0f, 48f, 20000f, 16f, "ground"));
 
+        // Platform sections
+        // Section 1
         createStaticBox(world, 220f, 120f, 180f, 16f, "ground");
         rects.add(new PlatformRect(220f, 120f, 180f, 16f, "ground"));
 
         createStaticBox(world, 520f, 170f, 140f, 16f, "ground");
         rects.add(new PlatformRect(520f, 170f, 140f, 16f, "ground"));
 
+        // Oneway platform
+        createStaticBox(world, 650f, 230f, 220f, 12f, "oneway");
+        rects.add(new PlatformRect(650f, 230f, 220f, 12f, "oneway"));
+
+        // Section 2
         createStaticBox(world, 820f, 140f, 220f, 16f, "ground");
         rects.add(new PlatformRect(820f, 140f, 220f, 16f, "ground"));
 
-        createStaticBox(world, 1000f, 120f, 16f, 200f, "ground");
-        rects.add(new PlatformRect(1000f, 120f, 16f, 200f, "ground"));
+        createStaticBox(world, 1100f, 180f, 200f, 16f, "ground");
+        rects.add(new PlatformRect(1100f, 180f, 200f, 16f, "ground"));
 
-        createStaticBox(world, 650f, 230f, 220f, 12f, "oneway");
-        rects.add(new PlatformRect(650f, 230f, 220f, 12f, "oneway"));
+        createStaticBox(world, 1400f, 130f, 250f, 16f, "ground");
+        rects.add(new PlatformRect(1400f, 130f, 250f, 16f, "ground"));
+
+        createStaticBox(world, 1700f, 190f, 200f, 16f, "oneway");
+        rects.add(new PlatformRect(1700f, 190f, 200f, 16f, "oneway"));
+
+        // End wall (far away now)
+        createStaticBox(world, 2000f, 120f, 16f, 400f, "ground");
+        rects.add(new PlatformRect(2000f, 120f, 16f, 400f, "ground"));
 
         return rects;
     }

@@ -13,7 +13,7 @@ public class CombatSystem {
 
     private final World world;
 
-    private static final float DEFAULT_MELEE_DURATION = 0.10f;
+    private static final float DEFAULT_MELEE_DURATION = 0.30f;
 
     private static final float KNOCKBACK_X = 3.0f;
     private static final float KNOCKBACK_Y = 2.0f;
@@ -108,10 +108,10 @@ public class CombatSystem {
             if (ah.ownerBody == ownerBody) return;
         }
 
-        float halfW = PhysicsConstants.toMeters(13f);
-        float halfH = PhysicsConstants.toMeters(9f);
+        float halfW = PhysicsConstants.toMeters(30f);
+        float halfH = PhysicsConstants.toMeters(18f); // Increase height a bit too for safety
 
-        float offsetX = PhysicsConstants.toMeters(16f) * facingDir;
+        float offsetX = PhysicsConstants.toMeters(30f) * facingDir;
         float offsetY = 0f;
 
         if (aimY == 1) {

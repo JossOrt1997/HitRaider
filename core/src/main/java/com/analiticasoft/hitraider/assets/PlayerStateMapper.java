@@ -14,6 +14,7 @@ public final class PlayerStateMapper {
             case FALL -> PlayerSprites.State.FALL;
             case DASH -> PlayerSprites.State.DASH;
             case ATTACK -> PlayerSprites.State.ATTACK;
+            case SHOOT -> PlayerSprites.State.SHOOT;
             case HURT -> PlayerSprites.State.HURT;
             case DEAD -> PlayerSprites.State.DEAD;
             case IDLE -> PlayerSprites.State.IDLE;
